@@ -1,0 +1,1 @@
+This is a toy application built while learning OpenGL and graphics programming
