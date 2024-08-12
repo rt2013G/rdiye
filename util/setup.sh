@@ -19,3 +19,5 @@ cd ../..
 rm -rf glfw
 
 ## INSTALL GLAD: https://glad.dav1d.de/
+
+## INSTALL GLM: https://github.com/g-truc/glm/releases

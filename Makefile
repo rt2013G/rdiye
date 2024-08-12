@@ -5,6 +5,6 @@ LIBS = src/glad.c
 run: build
 	@./bin/out
 build:
-	g++ $(FLAGS) $(LIBS) src/main.cpp -o bin/out $(OGL)
+	g++ $(FLAGS) src/main.cpp $(LIBS) -o bin/out $(OGL)
 t:
-	g++ $(FLAGS) $(LIBS) test/test.cpp -o bin/tout $(OGL) && ./bin/tout
+	g++ $(FLAGS) test/test.cpp $(LIBS) -o bin/tout $(OGL) && ./bin/tout
