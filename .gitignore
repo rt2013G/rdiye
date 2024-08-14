@@ -1,4 +1,6 @@
 .vscode/
+assets/
 bin/
 src/glad.c
 src/glm/
+src/stb/

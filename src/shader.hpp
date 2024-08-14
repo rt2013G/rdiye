@@ -9,8 +9,12 @@
 #include "string"
 
 struct shader_program {
-    GLuint program_id;
+    GLuint id;
     shader_program(const char *vertex_shader_path, const char *fragment_shader_path);
+    void use();
+    void set_int(const std::string &name, int value) const;
+    void set_float(const std::string &name, float value) const;
+    void set_bool(const std::string &name, bool value) const;
 };
 
 shader_program::shader_program(const char *vertex_shader_path, const char *fragment_shader_path) {
@@ -49,18 +53,34 @@ shader_program::shader_program(const char *vertex_shader_path, const char *fragm
                   << info_log << std::endl;
     }
 
-    this->program_id = glCreateProgram();
-    glAttachShader(this->program_id, vertex_shader);
-    glAttachShader(this->program_id, fragment_shader);
-    glLinkProgram(this->program_id);
-    glGetProgramiv(this->program_id, GL_LINK_STATUS, &ok);
+    this->id = glCreateProgram();
+    glAttachShader(this->id, vertex_shader);
+    glAttachShader(this->id, fragment_shader);
+    glLinkProgram(this->id);
+    glGetProgramiv(this->id, GL_LINK_STATUS, &ok);
     if (!ok) {
-        glGetProgramInfoLog(this->program_id, LOG_LENGTH, NULL, info_log);
+        glGetProgramInfoLog(this->id, LOG_LENGTH, NULL, info_log);
         std::cout << "PROGRAM LINKING ERROR:\n"
                   << info_log << std::endl;
     }
     glDeleteShader(vertex_shader);
     glDeleteShader(fragment_shader);
+}
+
+void shader_program::use() {
+    glUseProgram(id);
+}
+
+void shader_program::set_int(const std::string &name, int value) const {
+    glUniform1i(glGetUniformLocation(id, name.c_str()), value);
+}
+
+void shader_program::set_float(const std::string &name, float value) const {
+    glUniform1f(glGetUniformLocation(id, name.c_str()), value);
+}
+
+void shader_program::set_bool(const std::string &name, bool value) const {
+    glUniform1i(glGetUniformLocation(id, name.c_str()), (int)value);
 }
 
 #endif
