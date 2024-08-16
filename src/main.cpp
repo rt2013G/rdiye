@@ -102,10 +102,12 @@ int main(void) {
     glGenBuffers(1, &VBO);
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(5 * sizeof(float)));
+    glEnableVertexAttribArray(2);
 
     GLuint light_cube_VAO;
     glGenVertexArrays(1, &light_cube_VAO);
@@ -156,7 +158,7 @@ int main(void) {
         last_time = current_time;
 
         process_input(window);
-        glClearColor(0.3, 0.1, 0.1, 1.0);
+        glClearColor(0.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glActiveTexture(GL_TEXTURE0);
@@ -167,27 +169,34 @@ int main(void) {
         projection = glm::perspective(glm::radians(active_camera.FOV), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
         glm::mat4 view = active_camera.view_matrix();
 
+        glm::vec3 light_pos = glm::vec3(1.2f, 1.0f, 2.0f);
         glm::mat4 transform = glm::mat4(1.0f);
         glm::mat4 model = glm::mat4(1.0f);
-        model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-        transform = projection * view * model * transform;
-        object_shader.use();
-        object_shader.set_mat4("transform", transform);
-        object_shader.set_vec3("object_color", glm::vec3(0.5f, 0.8f, 0.7f));
-        object_shader.set_vec3("light_color", glm::vec3(1.0f, 1.0f, 1.0f));
-        glBufferData(GL_ARRAY_BUFFER, sizeof(TEXTURED_CUBE_VERTICES), TEXTURED_CUBE_VERTICES, GL_STATIC_DRAW);
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-
-        transform = glm::mat4(1.0f);
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(1.2f, 1.0f, 2.0f));
+        model = glm::translate(model, light_pos);
         model = glm::scale(model, glm::vec3(0.2f));
         lighting_shader.use();
         transform = projection * view * model * transform;
         lighting_shader.set_mat4("transform", transform);
         glBufferData(GL_ARRAY_BUFFER, sizeof(PLAIN_CUBE_VERTICES), PLAIN_CUBE_VERTICES, GL_STATIC_DRAW);
         glBindVertexArray(light_cube_VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        transform = glm::mat4(1.0f);
+        model = glm::mat4(1.0f);
+        model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
+        glm::mat4 projection_mul_view = projection * view;
+        glm::mat3 normal_matrix = glm::mat3(model);
+        normal_matrix = glm::inverse(normal_matrix);
+        normal_matrix = glm::transpose(normal_matrix);
+        object_shader.use();
+        object_shader.set_mat3("normal_matrix", normal_matrix);
+        object_shader.set_mat4("model", model);
+        object_shader.set_mat4("projection_mul_view", projection_mul_view);
+        object_shader.set_vec3("light_color", glm::vec3(1.0f, 1.0f, 1.0f));
+        object_shader.set_vec3("light_position", light_pos);
+        object_shader.set_vec3("viewer_position", active_camera.position);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(TEXTURED_CUBE_WITH_NORMALS), TEXTURED_CUBE_WITH_NORMALS, GL_STATIC_DRAW);
+        glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
         glfwSwapBuffers(window);

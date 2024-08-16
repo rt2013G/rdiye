@@ -16,6 +16,7 @@ struct shader_program {
     void set_float(const std::string &name, float value) const;
     void set_bool(const std::string &name, bool value) const;
     void set_vec3(const std::string &name, const glm::vec3 &value) const;
+    void set_mat3(const std::string &name, const glm::mat3 &mat) const;
     void set_mat4(const std::string &name, const glm::mat4 &mat) const;
 };
 
@@ -87,6 +88,10 @@ void shader_program::set_bool(const std::string &name, bool value) const {
 
 void shader_program::set_vec3(const std::string &name, const glm::vec3 &value) const {
     glUniform3fv(glGetUniformLocation(id, name.c_str()), 1, &value[0]);
+}
+
+void shader_program::set_mat3(const std::string &name, const glm::mat3 &mat) const {
+    glUniformMatrix3fv(glGetUniformLocation(id, name.c_str()), 1, GL_FALSE, &mat[0][0]);
 }
 
 void shader_program::set_mat4(const std::string &name, const glm::mat4 &mat) const {
