@@ -9,13 +9,24 @@
 
 #include "iostream"
 
+#include "camera.hpp"
 #include "shader.hpp"
 
 #define WINDOW_WIDTH 768
 #define WINDOW_HEIGHT 768
+#define NEAR_PLANE 0.1f
+#define FAR_PLANE 100.0f
+
+bool global_first_mouse = true;
+float global_lastX = WINDOW_WIDTH / 2.0f;
+float global_lastY = WINDOW_HEIGHT / 2.0f;
+camera active_camera = camera(glm::vec3(0.0f, 0.0f, 3.0f));
+float delta_time = 0.0f;
+glm::mat4 projection = glm::perspective(glm::radians(active_camera.FOV), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
     glViewport(0, 0, width, height);
+    projection = glm::perspective(glm::radians(active_camera.FOV), (float)width / (float)height, NEAR_PLANE, FAR_PLANE);
 }
 
 void process_input(GLFWwindow *window) {
@@ -25,7 +36,34 @@ void process_input(GLFWwindow *window) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
     } else if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    } else if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+        active_camera.move(camera::FORWARD, delta_time);
+    } else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+        active_camera.move(camera::BACKWARD, delta_time);
+    } else if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+        active_camera.move(camera::LEFT, delta_time);
+    } else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+        active_camera.move(camera::RIGHT, delta_time);
     }
+}
+
+void mouse_callback(GLFWwindow *window, double xposIn, double yposIn) {
+    float posX = (float)xposIn;
+    float posY = (float)yposIn;
+    if (global_first_mouse) {
+        global_lastX = posX;
+        global_lastY = posY;
+        global_first_mouse = false;
+    }
+    float offsetX = posX - global_lastX;
+    float offsetY = global_lastY - posY;
+    global_lastX = posX;
+    global_lastY = posY;
+    active_camera.process_mouse(offsetX, offsetY);
+}
+
+void scroll_callback(GLFWwindow *window, double offsetX, double offsetY) {
+    active_camera.process_scroll((float)offsetY);
 }
 
 int main(void) {
@@ -49,10 +87,14 @@ int main(void) {
     glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
     glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 
     glEnable(GL_DEPTH_TEST);
 
     shader_program shader("src/shaders/vertex_shader.glsl", "src/shaders/fragment_shader.glsl");
+    shader.use();
 
     float vertices[] = {
         -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
@@ -137,22 +179,16 @@ int main(void) {
         std::cout << "ERROR while loading texture";
     }
     stbi_image_free(data);
-    shader.use();
     shader.set_int("texture1", 0);
     shader.set_int("texture2", 1);
 
-    glm::mat4 transform = glm::mat4(1.0f);
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::rotate(model, glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-    glm::mat4 view = glm::mat4(1.0f);
-    view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
-    glm::mat4 projection;
-    projection = glm::perspective(glm::radians(45.0f), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);
-    transform = projection * view * model * transform;
-    glm::mat4 pv = projection * view;
-    shader.set_mat4("transform", transform);
+    float last_time = 0.0f;
 
     while (!glfwWindowShouldClose(window)) {
+        float current_time = glfwGetTime();
+        delta_time = current_time - last_time;
+        last_time = current_time;
+
         process_input(window);
         glClearColor(0.3, 0.1, 0.1, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -162,11 +198,14 @@ int main(void) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, texture2);
 
-        glUseProgram(shader.id);
-        transform = glm::mat4(1.0f);
-        model = glm::mat4(1.0f);
+        shader.use();
+
+        glm::mat4 transform = glm::mat4(1.0f);
+        projection = glm::perspective(glm::radians(active_camera.FOV), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
+        glm::mat4 view = active_camera.view_matrix();
+        glm::mat4 model = glm::mat4(1.0f);
         model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-        transform = pv * model * transform;
+        transform = projection * view * model * transform;
         shader.set_mat4("transform", transform);
 
         glBindVertexArray(VAO);
