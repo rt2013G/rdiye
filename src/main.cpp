@@ -10,6 +10,7 @@
 #include "iostream"
 
 #include "camera.hpp"
+#include "data.hpp"
 #include "shader.hpp"
 
 #define WINDOW_WIDTH 768
@@ -93,61 +94,25 @@ int main(void) {
 
     glEnable(GL_DEPTH_TEST);
 
-    shader_program shader("src/shaders/vertex_shader.glsl", "src/shaders/fragment_shader.glsl");
-    shader.use();
+    shader_program object_shader("src/shaders/vertex_shader.glsl", "src/shaders/fragment_shader.glsl");
+    shader_program lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
 
-    float vertices[] = {
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
-        0.5f, -0.5f, -0.5f, 1.0f, 0.0f,
-        0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-        0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
-
-        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
-        0.5f, -0.5f, 0.5f, 1.0f, 0.0f,
-        0.5f, 0.5f, 0.5f, 1.0f, 1.0f,
-        0.5f, 0.5f, 0.5f, 1.0f, 1.0f,
-        -0.5f, 0.5f, 0.5f, 0.0f, 1.0f,
-        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
-
-        -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-        -0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
-        -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-
-        0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-        0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-        0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-        0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-        0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
-        0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-        0.5f, -0.5f, -0.5f, 1.0f, 1.0f,
-        0.5f, -0.5f, 0.5f, 1.0f, 0.0f,
-        0.5f, -0.5f, 0.5f, 1.0f, 0.0f,
-        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-
-        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f,
-        0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-        0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-        0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-        -0.5f, 0.5f, 0.5f, 0.0f, 0.0f,
-        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f};
     GLuint VBO, VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
+
+    GLuint light_cube_VAO;
+    glGenVertexArrays(1, &light_cube_VAO);
+    glBindVertexArray(light_cube_VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
 
     GLuint texture1, texture2;
     glGenTextures(0, &texture1);
@@ -179,8 +144,9 @@ int main(void) {
         std::cout << "ERROR while loading texture";
     }
     stbi_image_free(data);
-    shader.set_int("texture1", 0);
-    shader.set_int("texture2", 1);
+    object_shader.use();
+    object_shader.set_int("texture1", 0);
+    object_shader.set_int("texture2", 1);
 
     float last_time = 0.0f;
 
@@ -198,17 +164,30 @@ int main(void) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, texture2);
 
-        shader.use();
-
-        glm::mat4 transform = glm::mat4(1.0f);
         projection = glm::perspective(glm::radians(active_camera.FOV), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
         glm::mat4 view = active_camera.view_matrix();
+
+        glm::mat4 transform = glm::mat4(1.0f);
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
         transform = projection * view * model * transform;
-        shader.set_mat4("transform", transform);
-
+        object_shader.use();
+        object_shader.set_mat4("transform", transform);
+        object_shader.set_vec3("object_color", glm::vec3(0.5f, 0.8f, 0.7f));
+        object_shader.set_vec3("light_color", glm::vec3(1.0f, 1.0f, 1.0f));
+        glBufferData(GL_ARRAY_BUFFER, sizeof(TEXTURED_CUBE_VERTICES), TEXTURED_CUBE_VERTICES, GL_STATIC_DRAW);
         glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        transform = glm::mat4(1.0f);
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(1.2f, 1.0f, 2.0f));
+        model = glm::scale(model, glm::vec3(0.2f));
+        lighting_shader.use();
+        transform = projection * view * model * transform;
+        lighting_shader.set_mat4("transform", transform);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(PLAIN_CUBE_VERTICES), PLAIN_CUBE_VERTICES, GL_STATIC_DRAW);
+        glBindVertexArray(light_cube_VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
         glfwSwapBuffers(window);
