@@ -104,9 +104,9 @@ int main(void) {
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(5 * sizeof(float)));
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
     GLuint light_cube_VAO;
@@ -116,29 +116,29 @@ int main(void) {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
-    GLuint texture1, texture2;
-    glGenTextures(0, &texture1);
-    glBindTexture(GL_TEXTURE_2D, texture1);
+    GLuint material_diffuse_map, material_specular_map;
+    glGenTextures(0, &material_diffuse_map);
+    glBindTexture(GL_TEXTURE_2D, material_diffuse_map);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     int img_width, img_height, channels;
     stbi_set_flip_vertically_on_load(true);
-    unsigned char *data = stbi_load("assets/container.jpg", &img_width, &img_height, &channels, 0);
+    unsigned char *data = stbi_load("assets/container2.png", &img_width, &img_height, &channels, 0);
     if (data) {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, img_width, img_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img_width, img_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
     } else {
         std::cout << "ERROR while loading texture";
     }
-    glGenTextures(1, &texture2);
-    glBindTexture(GL_TEXTURE_2D, texture2);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glGenTextures(1, &material_specular_map);
+    glBindTexture(GL_TEXTURE_2D, material_specular_map);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    data = stbi_load("assets/awesomeface.png", &img_width, &img_height, &channels, 0);
+    data = stbi_load("assets/container2_s.png", &img_width, &img_height, &channels, 0);
     if (data) {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img_width, img_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
@@ -146,9 +146,6 @@ int main(void) {
         std::cout << "ERROR while loading texture";
     }
     stbi_image_free(data);
-    object_shader.use();
-    object_shader.set_int("texture1", 0);
-    object_shader.set_int("texture2", 1);
 
     float last_time = 0.0f;
 
@@ -162,9 +159,9 @@ int main(void) {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture1);
+        glBindTexture(GL_TEXTURE_2D, material_diffuse_map);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, texture2);
+        glBindTexture(GL_TEXTURE_2D, material_specular_map);
 
         projection = glm::perspective(glm::radians(active_camera.FOV), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
         glm::mat4 view = active_camera.view_matrix();
@@ -183,7 +180,6 @@ int main(void) {
 
         transform = glm::mat4(1.0f);
         model = glm::mat4(1.0f);
-        model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
         glm::mat4 projection_mul_view = projection * view;
         glm::mat3 normal_matrix = glm::mat3(model);
         normal_matrix = glm::inverse(normal_matrix);
@@ -192,9 +188,14 @@ int main(void) {
         object_shader.set_mat3("normal_matrix", normal_matrix);
         object_shader.set_mat4("model", model);
         object_shader.set_mat4("projection_mul_view", projection_mul_view);
-        object_shader.set_vec3("light_color", glm::vec3(1.0f, 1.0f, 1.0f));
-        object_shader.set_vec3("light_position", light_pos);
         object_shader.set_vec3("viewer_position", active_camera.position);
+        object_shader.set_int("material.diffuse", 0);
+        object_shader.set_int("material.specular", 1);
+        object_shader.set_float("material.shininess", 32.0f);
+        object_shader.set_vec3("light.position", light_pos);
+        object_shader.set_vec3("light.ambient", glm::vec3(0.2f, 0.2f, 0.2f));
+        object_shader.set_vec3("light.diffuse", glm::vec3(0.5f, 0.5f, 0.5f));
+        object_shader.set_vec3("light.specular", glm::vec3(1.0f, 1.0f, 1.0f));
         glBufferData(GL_ARRAY_BUFFER, sizeof(TEXTURED_CUBE_WITH_NORMALS), TEXTURED_CUBE_WITH_NORMALS, GL_STATIC_DRAW);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
