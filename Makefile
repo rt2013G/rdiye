@@ -1,6 +1,6 @@
 FLAGS = -std=c++11 -O0 -Wall -Werror -g
 OGL = -lGL -lGLU -lX11 -lXxf86vm -lXrandr -lpthread -lXi -lglfw3
-LIBS = src/glad.c src/stb/stb_image.cpp
+LIBS = src/glad.c src/stb/stb_image.cpp -lassimp
 
 run: build
 	@./bin/out

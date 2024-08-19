@@ -11,6 +11,7 @@
 
 #include "camera.hpp"
 #include "data.hpp"
+#include "model_loader.hpp"
 #include "shader.hpp"
 
 #define WINDOW_WIDTH 768
@@ -149,6 +150,8 @@ int main(void) {
 
     float last_time = 0.0f;
 
+    // model_object backpack = model_object("assets/backpack/backpack.obj");
+
     while (!glfwWindowShouldClose(window)) {
         float current_time = glfwGetTime();
         delta_time = current_time - last_time;
@@ -206,6 +209,8 @@ int main(void) {
         glBufferData(GL_ARRAY_BUFFER, sizeof(TEXTURED_CUBE_WITH_NORMALS), TEXTURED_CUBE_WITH_NORMALS, GL_STATIC_DRAW);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        // backpack.draw(object_shader);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
