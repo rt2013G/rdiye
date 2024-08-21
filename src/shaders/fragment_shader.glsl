@@ -5,7 +5,6 @@ out vec4 frag_color;
 in vec2 texture_coord;
 in vec3 normal;
 in vec3 fragment_position;
-in vec4 fragment_light_space_position;
 
 struct Material {
     sampler2D diffuse;
@@ -36,11 +35,9 @@ uniform Material material;
 uniform DirectionalLight dir_light;
 uniform PointLight point_lights[POINT_LIGHT_COUNT];
 uniform vec3 viewer_position;
-uniform sampler2D shadow_map;
 
 vec3 calculate_directional_light(DirectionalLight dir_light, vec3 normal, vec3 view_direction);
 vec3 calculate_point_light(PointLight p_light, vec3 normal, vec3 fragment_position, vec3 view_direction);
-float calculate_shadow(vec4 fragment_light_space_position);
 
 void main() {
     vec3 normalized_normal = normalize(normal);
@@ -63,8 +60,7 @@ vec3 calculate_directional_light(DirectionalLight dir_light, vec3 normal, vec3 v
     vec3 ambient = dir_light.ambient * vec3(texture(material.diffuse, texture_coord));
     vec3 diffuse = dir_light.diffuse * diffuse_strength * vec3(texture(material.diffuse, texture_coord));
     vec3 specular = dir_light.specular * specular_strength * vec3(texture(material.specular, texture_coord));
-    float in_shadow = calculate_shadow(fragment_light_space_position);
-    return (ambient + (1.0 - in_shadow) * (diffuse + specular));
+    return (ambient + (diffuse + specular));
 }
 
 vec3 calculate_point_light(PointLight p_light, vec3 normal, vec3 fragment_position, vec3 view_direction) {
@@ -80,15 +76,5 @@ vec3 calculate_point_light(PointLight p_light, vec3 normal, vec3 fragment_positi
     vec3 ambient = vec3(texture(material.diffuse, texture_coord)) * p_light.ambient * attenuation;
     vec3 diffuse = vec3(texture(material.diffuse, texture_coord)) * diffuse_strength * p_light.diffuse * attenuation;
     vec3 specular = vec3(texture(material.specular, texture_coord)) * specular_strength * p_light.specular * attenuation;
-    float in_shadow = calculate_shadow(fragment_light_space_position);
-    return (ambient + (1.0 - in_shadow) * (diffuse + specular));
-}
-
-float calculate_shadow(vec4 fragment_light_space_position) {
-    vec3 projected_coords = fragment_light_space_position.xyz / fragment_light_space_position.w;
-    projected_coords = projected_coords * 0.5 + 0.5;
-    float closest = texture(shadow_map, projected_coords.xy).r;
-    float current = projected_coords.z;
-    float shadow = current > closest ? 1.0 : 0.0;
-    return shadow;
+    return (ambient + (diffuse + specular));
 }

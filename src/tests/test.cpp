@@ -39,6 +39,7 @@ int main(void) {
     }
 
     test_texture();
+
     std::cout << "TESTS OK" << std::endl;
     return 0;
 }
