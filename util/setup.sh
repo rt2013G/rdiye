@@ -1,10 +1,10 @@
 #!/bin/sh
 
 mkdir src
-mkdir src/stb
+mkdir src/lib/stb
 touch src/main.cpp
-mkdir test
-touch test/test.cpp
+mkdir src/tests
+touch src/tests/test.cpp
 mkdir bin
 touch Makefile
 
@@ -22,10 +22,10 @@ rm -rf glfw
 ## INSTALL GLM: https://github.com/g-truc/glm/releases
 
 git clone https://github.com/nothings/stb
-mv stb/stb_image.h src/stb
+mv stb/stb_image.h src/lib/stb
 rm -rf stb
-touch src/stb/stb_image.cpp
-printf "#define STB_IMAGE_IMPLEMENTATION\n#include \"stb_image.h\"" >> src/stb/stb_image.cpp
+touch src/lib/stb/stb_image.cpp
+printf "#define STB_IMAGE_IMPLEMENTATION\n#include \"stb_image.h\"" >> src/lib/stb/stb_image.cpp
 
 git clone https://github.com/assimp/assimp.git
 cd assimp

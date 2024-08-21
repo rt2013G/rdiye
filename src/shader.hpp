@@ -8,9 +8,9 @@
 #include "sstream"
 #include "string"
 
-struct shader_program {
+struct ShaderProgram {
     GLuint id;
-    shader_program(const char *vertex_shader_path, const char *fragment_shader_path);
+    ShaderProgram(const char *vertex_shader_path, const char *fragment_shader_path);
     void use();
     void set_int(const std::string &name, int value) const;
     void set_float(const std::string &name, float value) const;
@@ -20,7 +20,7 @@ struct shader_program {
     void set_mat4(const std::string &name, const glm::mat4 &mat) const;
 };
 
-shader_program::shader_program(const char *vertex_shader_path, const char *fragment_shader_path) {
+ShaderProgram::ShaderProgram(const char *vertex_shader_path, const char *fragment_shader_path) {
     std::ifstream vertex_file{vertex_shader_path};
     std::stringstream vertex_stream;
     vertex_stream << vertex_file.rdbuf();
@@ -70,31 +70,31 @@ shader_program::shader_program(const char *vertex_shader_path, const char *fragm
     glDeleteShader(fragment_shader);
 }
 
-void shader_program::use() {
+void ShaderProgram::use() {
     glUseProgram(id);
 }
 
-void shader_program::set_int(const std::string &name, int value) const {
+void ShaderProgram::set_int(const std::string &name, int value) const {
     glUniform1i(glGetUniformLocation(id, name.c_str()), value);
 }
 
-void shader_program::set_float(const std::string &name, float value) const {
+void ShaderProgram::set_float(const std::string &name, float value) const {
     glUniform1f(glGetUniformLocation(id, name.c_str()), value);
 }
 
-void shader_program::set_bool(const std::string &name, bool value) const {
+void ShaderProgram::set_bool(const std::string &name, bool value) const {
     glUniform1i(glGetUniformLocation(id, name.c_str()), (int)value);
 }
 
-void shader_program::set_vec3(const std::string &name, const glm::vec3 &value) const {
+void ShaderProgram::set_vec3(const std::string &name, const glm::vec3 &value) const {
     glUniform3fv(glGetUniformLocation(id, name.c_str()), 1, &value[0]);
 }
 
-void shader_program::set_mat3(const std::string &name, const glm::mat3 &mat) const {
+void ShaderProgram::set_mat3(const std::string &name, const glm::mat3 &mat) const {
     glUniformMatrix3fv(glGetUniformLocation(id, name.c_str()), 1, GL_FALSE, &mat[0][0]);
 }
 
-void shader_program::set_mat4(const std::string &name, const glm::mat4 &mat) const {
+void ShaderProgram::set_mat4(const std::string &name, const glm::mat4 &mat) const {
     glUniformMatrix4fv(glGetUniformLocation(id, name.c_str()), 1, GL_FALSE, &mat[0][0]);
 }
 

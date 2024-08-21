@@ -2,10 +2,10 @@
 
 #include "GLFW/glfw3.h"
 
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-#include "glm/gtc/type_ptr.hpp"
-#include "stb/stb_image.h"
+#include "lib/glm/glm.hpp"
+#include "lib/glm/gtc/matrix_transform.hpp"
+#include "lib/glm/gtc/type_ptr.hpp"
+#include "lib/stb/stb_image.h"
 
 #include "iostream"
 
@@ -14,8 +14,8 @@
 #include "model_loader.hpp"
 #include "shader.hpp"
 
-#define WINDOW_WIDTH 768
-#define WINDOW_HEIGHT 768
+#define WINDOW_WIDTH 1920
+#define WINDOW_HEIGHT 1080
 #define NEAR_PLANE 0.1f
 #define FAR_PLANE 100.0f
 
@@ -95,8 +95,9 @@ int main(void) {
 
     glEnable(GL_DEPTH_TEST);
 
-    shader_program object_shader("src/shaders/vertex_shader.glsl", "src/shaders/fragment_shader.glsl");
-    shader_program lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
+    ShaderProgram object_shader("src/shaders/vertex_shader.glsl", "src/shaders/fragment_shader.glsl");
+    ShaderProgram lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
+    ShaderProgram shadow_shader("src/shaders/empty_vs.glsl", "src/shaders/shadow_fs.glsl");
 
     GLuint VBO, VAO;
     glGenVertexArrays(1, &VAO);
@@ -116,6 +117,20 @@ int main(void) {
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
+
+    GLuint plane_VBO, plane_VAO;
+    glGenVertexArrays(1, &plane_VAO);
+    glGenBuffers(1, &plane_VBO);
+    glBindVertexArray(plane_VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, plane_VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(TEXTURED_PLANE), TEXTURED_PLANE, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
+    glBindVertexArray(0);
 
     GLuint material_diffuse_map, material_specular_map;
     glGenTextures(0, &material_diffuse_map);
@@ -146,11 +161,33 @@ int main(void) {
     } else {
         std::cout << "ERROR while loading texture";
     }
+    GLuint wood_texture = load_texture("assets/wood.png");
     stbi_image_free(data);
 
     float last_time = 0.0f;
 
     // model_object backpack = model_object("assets/backpack/backpack.obj");
+
+    GLuint depth_map_FBO;
+    glGenFramebuffers(1, &depth_map_FBO);
+
+    GLuint depth_map;
+    glGenTextures(1, &depth_map);
+    glBindTexture(GL_TEXTURE_2D, depth_map);
+    const uint16_t SHADOW_WIDTH = 1024;
+    const uint16_t SHADOW_HEIGHT = 1024;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
+                 SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, depth_map_FBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_map, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     while (!glfwWindowShouldClose(window)) {
         float current_time = glfwGetTime();
@@ -158,6 +195,22 @@ int main(void) {
         last_time = current_time;
 
         process_input(window);
+
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, depth_map_FBO);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        const float LIGHT_NEAR_PLANE = 1.0f;
+        const float LIGHT_FAR_PLANE = 7.5f;
+        glm::mat4 light_render_projection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, LIGHT_NEAR_PLANE, LIGHT_FAR_PLANE);
+        glm::mat4 light_render_view = glm::lookAt(glm::vec3(-2.0f, 4.0f, -1.0f),
+                                                  glm::vec3(0.0f, 0.0f, 0.0f),
+                                                  glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 light_space_matrix = light_render_projection * light_render_view;
+        shadow_shader.use();
+        shadow_shader.set_mat4("light_space_matrix", light_space_matrix);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
         glClearColor(0.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -194,7 +247,7 @@ int main(void) {
         object_shader.set_vec3("viewer_position", active_camera.position);
         object_shader.set_int("material.diffuse", 0);
         object_shader.set_int("material.specular", 1);
-        object_shader.set_float("material.shininess", 32.0f);
+        object_shader.set_float("material.shininess", 128.0f);
         object_shader.set_vec3("dir_light.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
         object_shader.set_vec3("dir_light.ambient", glm::vec3(0.05f, 0.05f, 0.05f));
         object_shader.set_vec3("dir_light.diffuse", glm::vec3(0.4f, 0.4f, 0.4f));
@@ -206,6 +259,7 @@ int main(void) {
         object_shader.set_float("point_lights[0].constant", 1.0f);
         object_shader.set_float("point_lights[0].linear", 0.09f);
         object_shader.set_float("point_lights[0].quadratic", 0.032f);
+        object_shader.set_mat4("light_space_matrix", light_space_matrix);
         glBufferData(GL_ARRAY_BUFFER, sizeof(TEXTURED_CUBE_WITH_NORMALS), TEXTURED_CUBE_WITH_NORMALS, GL_STATIC_DRAW);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);

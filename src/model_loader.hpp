@@ -3,10 +3,10 @@
 
 #include "glad/glad.h"
 
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-#include "glm/gtc/type_ptr.hpp"
-#include "stb/stb_image.h"
+#include "lib/glm/glm.hpp"
+#include "lib/glm/gtc/matrix_transform.hpp"
+#include "lib/glm/gtc/type_ptr.hpp"
+#include "lib/stb/stb_image.h"
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -14,6 +14,7 @@
 #include "vector"
 
 #include "shader.hpp"
+#include "texture.hpp"
 
 struct vertex {
     glm::vec3 position;
@@ -21,30 +22,16 @@ struct vertex {
     glm::vec2 tex_coords;
 };
 
-enum texture_type {
-    DIFFUSE = 0,
-    SPECULAR = 1
-};
-const std::string texture_type_string[]{
-    "diffuse",
-    "specular"};
-
-struct texture {
-    GLuint id;
-    texture_type type;
-    std::string path;
-};
-
 struct Mesh {
     std::vector<vertex> vertices;
     std::vector<GLuint> indices;
-    std::vector<texture> textures;
+    std::vector<Texture> textures;
     GLuint VAO, VBO, EBO;
-    Mesh(std::vector<vertex> &vertices, std::vector<GLuint> &indices, std::vector<texture> &textures);
-    void draw(shader_program &shader_program);
+    Mesh(std::vector<vertex> &vertices, std::vector<GLuint> &indices, std::vector<Texture> &textures);
+    void draw(ShaderProgram &ShaderProgram);
 };
 
-Mesh::Mesh(std::vector<vertex> &vertices, std::vector<GLuint> &indices, std::vector<texture> &textures) {
+Mesh::Mesh(std::vector<vertex> &vertices, std::vector<GLuint> &indices, std::vector<Texture> &textures) {
     this->vertices = vertices;
     this->indices = indices;
     this->textures = textures;
@@ -67,12 +54,12 @@ Mesh::Mesh(std::vector<vertex> &vertices, std::vector<GLuint> &indices, std::vec
     glBindVertexArray(0);
 }
 
-void Mesh::draw(shader_program &shader_program) {
+void Mesh::draw(ShaderProgram &ShaderProgram) {
     GLuint diffuse_count = 1;
     GLuint specular_count = 1;
     for (unsigned int i = 0; i < this->textures.size(); i++) {
         glActiveTexture(GL_TEXTURE0 + i);
-        texture_type type = this->textures[i].type;
+        TextureType type = this->textures[i].type;
         std::string texture_number;
         if (type == DIFFUSE) {
             texture_number = std::to_string(diffuse_count);
@@ -81,7 +68,7 @@ void Mesh::draw(shader_program &shader_program) {
             texture_number = std::to_string(specular_count);
             specular_count++;
         }
-        shader_program.set_int(("material." + texture_type_string[type] + texture_number).c_str(), i);
+        ShaderProgram.set_int(("material." + TEXTURE_TYPE_TO_STRING[type] + texture_number).c_str(), i);
         glBindTexture(GL_TEXTURE_2D, this->textures[i].id);
     }
     glActiveTexture(GL_TEXTURE0);
@@ -94,12 +81,12 @@ struct model_object {
     std::string path;
     std::string dir;
     std::vector<Mesh> meshes;
-    std::vector<texture> loaded_textures;
+    std::vector<Texture> loaded_textures;
     model_object(std::string path);
     void process_node(aiNode *node, const aiScene *scene);
     Mesh process_mesh(aiMesh *mesh, const aiScene *scene);
     std::vector<texture> load_material_textures(aiMaterial *mat, aiTextureType type, texture_type tex_type);
-    void draw(shader_program &shader_program);
+    void draw(ShaderProgram &ShaderProgram);
 };
 
 model_object::model_object(std::string path) : path(path) {
@@ -123,37 +110,6 @@ void model_object::process_node(aiNode *node, const aiScene *scene) {
     for (unsigned int i = 0; i < node->mNumChildren; i++) {
         process_node(node->mChildren[i], scene);
     }
-}
-
-GLuint load_texture(const char *path, const std::string &directory) {
-    std::string filename = std::string(path);
-    filename = directory + '/' + filename;
-    GLuint texture_id;
-    glGenTextures(1, &texture_id);
-    int tex_width, tex_height, num_channels;
-    unsigned char *data = stbi_load(filename.c_str(), &tex_width, &tex_height, &num_channels, 0);
-    if (data) {
-        GLenum format;
-        if (num_channels == 1) {
-            format = GL_RED;
-        } else if (num_channels == 3) {
-            format = GL_RGB;
-        } else if (num_channels == 4) {
-            format = GL_RGBA;
-        }
-        glBindTexture(GL_TEXTURE_2D, texture_id);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, tex_width, tex_height, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    } else {
-        std::cout << "ERROR. Failed to load texture at path: " << path << std::endl;
-    }
-    stbi_image_free(data);
-
-    return texture_id;
 }
 
 std::vector<texture> model_object::load_material_textures(aiMaterial *mat, aiTextureType type, texture_type tex_type) {
@@ -229,9 +185,9 @@ Mesh model_object::process_mesh(aiMesh *mesh, const aiScene *scene) {
     return Mesh(vertices, indices, textures);
 }
 
-void model_object::draw(shader_program &shader_program) {
+void model_object::draw(ShaderProgram &ShaderProgram) {
     for (unsigned int i = 0; i < this->meshes.size(); i++) {
-        meshes[i].draw(shader_program);
+        meshes[i].draw(ShaderProgram);
     }
 }
 

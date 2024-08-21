@@ -3,8 +3,8 @@
 
 #include "glad/glad.h"
 
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
+#include "lib/glm/glm.hpp"
+#include "lib/glm/gtc/matrix_transform.hpp"
 
 const float DEFAULT_ALPHA = -90.0f;
 const float DEFAULT_BETA = 0.0f;
