@@ -11,7 +11,6 @@
 
 #include "camera.hpp"
 #include "data.hpp"
-#include "model.hpp"
 #include "shader.hpp"
 
 #define WINDOW_WIDTH 1920
@@ -112,6 +111,76 @@ int main(void) {
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
+    GLuint container_diffuse, container_specular, wood_diffuse;
+    glGenTextures(1, &container_diffuse);
+    glGenTextures(1, &container_specular);
+    glGenTextures(1, &wood_diffuse);
+    int tw, th, tc;
+    unsigned char *data = stbi_load("assets/container2.png", &tw, &th, &tc, 0);
+    if (data) {
+        GLenum format;
+        if (tc == 1) {
+            format = GL_RED;
+        } else if (tc == 3) {
+            format = GL_RGB;
+        } else if (tc == 4) {
+            format = GL_RGBA;
+        }
+        glBindTexture(GL_TEXTURE_2D, container_diffuse);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, tw, th, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    } else {
+        std::cout << "ERROR. Failed to load texture at path: " << "assets/container2.png" << std::endl;
+    }
+
+    data = stbi_load("assets/container2_s.png", &tw, &th, &tc, 0);
+    if (data) {
+        GLenum format;
+        if (tc == 1) {
+            format = GL_RED;
+        } else if (tc == 3) {
+            format = GL_RGB;
+        } else if (tc == 4) {
+            format = GL_RGBA;
+        }
+        glBindTexture(GL_TEXTURE_2D, container_specular);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, tw, th, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    } else {
+        std::cout << "ERROR. Failed to load texture at path: " << "assets/container2_s.png" << std::endl;
+        return -1;
+    }
+
+    data = stbi_load("assets/wood.png", &tw, &th, &tc, 0);
+    if (data) {
+        GLenum format;
+        if (tc == 1) {
+            format = GL_RED;
+        } else if (tc == 3) {
+            format = GL_RGB;
+        } else if (tc == 4) {
+            format = GL_RGBA;
+        }
+        glBindTexture(GL_TEXTURE_2D, wood_diffuse);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, tw, th, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    } else {
+        std::cout << "ERROR. Failed to load texture at path: " << "assets/wood.png" << std::endl;
+    }
+    stbi_image_free(data);
+
     GLuint light_cube_VAO;
     glGenVertexArrays(1, &light_cube_VAO);
     glBindVertexArray(light_cube_VAO);
@@ -119,12 +188,7 @@ int main(void) {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
-    Texture container_diffuse = Texture("assets/container2.png");
-    Texture container_specular = Texture("assets/container2_s.png");
-
     float last_time = 0.0f;
-
-    Model backpack = Model("assets/backpack/backpack.obj");
 
     while (!glfwWindowShouldClose(window)) {
         float current_time = glfwGetTime();
@@ -135,11 +199,6 @@ int main(void) {
 
         glClearColor(0.2, 0.2, 0.2, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, container_diffuse.id);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, container_specular.id);
 
         projection = glm::perspective(glm::radians(active_camera.FOV), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
         glm::mat4 view = active_camera.view_matrix();
@@ -152,7 +211,7 @@ int main(void) {
         lighting_shader.use();
         transform = projection * view * model * transform;
         lighting_shader.set_mat4("transform", transform);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(PLAIN_CUBE_VERTICES), PLAIN_CUBE_VERTICES, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
         glBindVertexArray(light_cube_VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
@@ -166,7 +225,11 @@ int main(void) {
         object_shader.set_mat4("model", model);
         object_shader.set_mat4("projection_mul_view", projection_mul_view);
         object_shader.set_vec3("viewer_position", active_camera.position);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, container_diffuse);
         object_shader.set_int("material.diffuse", 0);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, container_specular);
         object_shader.set_int("material.specular", 1);
         object_shader.set_float("material.shininess", 128.0f);
         object_shader.set_vec3("dir_light.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
@@ -180,11 +243,9 @@ int main(void) {
         object_shader.set_float("point_lights[0].constant", 1.0f);
         object_shader.set_float("point_lights[0].linear", 0.09f);
         object_shader.set_float("point_lights[0].quadratic", 0.032f);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(TEXTURED_CUBE_WITH_NORMALS), TEXTURED_CUBE_WITH_NORMALS, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(CUBE_VERTICES), CUBE_VERTICES, GL_STATIC_DRAW);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
-
-        backpack.draw(object_shader);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

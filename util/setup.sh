@@ -22,7 +22,7 @@ rm -rf glfw
 ## INSTALL GLM: https://github.com/g-truc/glm/releases
 
 git clone https://github.com/nothings/stb
-mv stb/stb_image.h src/lib/stb
+mv stb/stb_image.h src/lib/stb/
 rm -rf stb
 touch src/lib/stb/stb_image.cpp
 printf "#define STB_IMAGE_IMPLEMENTATION\n#include \"stb_image.h\"" >> src/lib/stb/stb_image.cpp
