@@ -8,3 +8,5 @@ build:
 	g++ $(FLAGS) src/main.cpp $(LIBS) -o bin/out $(OGL)
 tests:
 	g++ $(FLAGS) src/tests/test.cpp $(LIBS) -o bin/test_out $(OGL) && ./bin/test_out
+breakout:
+	g++ $(FLAGS) src/demo/breakout.cpp $(LIBS) -o bin/breakout_out $(OGL) && ./bin/breakout_out
