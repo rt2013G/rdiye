@@ -25,11 +25,11 @@ struct PointLight {
     vec3 diffuse;
     vec3 specular;
 
-    float constant;
-    float linear;
-    float quadratic;
+    float constant_factor;
+    float linear_factor;
+    float quadratic_factor;
 };
-#define POINT_LIGHT_COUNT 1
+#define POINT_LIGHT_COUNT 2
 
 uniform Material material;
 uniform DirectionalLight dir_light;
@@ -65,7 +65,7 @@ vec3 calculate_directional_light(DirectionalLight dir_light, vec3 normal, vec3 v
 
 vec3 calculate_point_light(PointLight p_light, vec3 normal, vec3 fragment_position, vec3 view_direction) {
     float distance = length(p_light.position - fragment_position);
-    float attenuation = 1.0 / (p_light.constant + p_light.linear * distance + p_light.quadratic * distance * distance);
+    float attenuation = 1.0 / (p_light.constant_factor + p_light.linear_factor * distance + p_light.quadratic_factor * distance * distance);
 
     vec3 light_direction = normalize(p_light.position - fragment_position);
     float diffuse_strength = max(dot(normal, light_direction), 0.0);

@@ -11,7 +11,9 @@
 
 #include "camera.hpp"
 #include "data.hpp"
+#include "lights.hpp"
 #include "shader.hpp"
+#include "texture.hpp"
 
 #define WINDOW_WIDTH 1920
 #define WINDOW_HEIGHT 1080
@@ -111,75 +113,8 @@ int main(void) {
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
-    GLuint container_diffuse, container_specular, wood_diffuse;
-    glGenTextures(1, &container_diffuse);
-    glGenTextures(1, &container_specular);
-    glGenTextures(1, &wood_diffuse);
-    int tw, th, tc;
-    unsigned char *data = stbi_load("assets/container2.png", &tw, &th, &tc, 0);
-    if (data) {
-        GLenum format;
-        if (tc == 1) {
-            format = GL_RED;
-        } else if (tc == 3) {
-            format = GL_RGB;
-        } else if (tc == 4) {
-            format = GL_RGBA;
-        }
-        glBindTexture(GL_TEXTURE_2D, container_diffuse);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, tw, th, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    } else {
-        std::cout << "ERROR. Failed to load texture at path: " << "assets/container2.png" << std::endl;
-    }
-
-    data = stbi_load("assets/container2_s.png", &tw, &th, &tc, 0);
-    if (data) {
-        GLenum format;
-        if (tc == 1) {
-            format = GL_RED;
-        } else if (tc == 3) {
-            format = GL_RGB;
-        } else if (tc == 4) {
-            format = GL_RGBA;
-        }
-        glBindTexture(GL_TEXTURE_2D, container_specular);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, tw, th, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    } else {
-        std::cout << "ERROR. Failed to load texture at path: " << "assets/container2_s.png" << std::endl;
-        return -1;
-    }
-
-    data = stbi_load("assets/wood.png", &tw, &th, &tc, 0);
-    if (data) {
-        GLenum format;
-        if (tc == 1) {
-            format = GL_RED;
-        } else if (tc == 3) {
-            format = GL_RGB;
-        } else if (tc == 4) {
-            format = GL_RGBA;
-        }
-        glBindTexture(GL_TEXTURE_2D, wood_diffuse);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, tw, th, 0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    } else {
-        std::cout << "ERROR. Failed to load texture at path: " << "assets/wood.png" << std::endl;
-    }
-    stbi_image_free(data);
+    Texture container_diffuse = Texture("assets/container2.png");
+    Texture container_specular = Texture("assets/container2_s.png");
 
     GLuint light_cube_VAO;
     glGenVertexArrays(1, &light_cube_VAO);
@@ -189,6 +124,16 @@ int main(void) {
     glEnableVertexAttribArray(0);
 
     float last_time = 0.0f;
+
+    uint8_t plight_count = 2;
+    PointLight *plights = (PointLight *)malloc(sizeof(PointLight) * plight_count);
+    glm::vec3 *plight_positions = (glm::vec3 *)malloc(sizeof(glm::vec3) * plight_count);
+    plight_positions[0] = glm::vec3(1.2f, 1.0f, 2.0f);
+    plight_positions[1] = glm::vec3(1.2f, 3.0f, 1.0f);
+    create_white_point_lights(plights, plight_positions, plight_count);
+
+    DirectionalLight dir_light;
+    create_dir_light(dir_light);
 
     while (!glfwWindowShouldClose(window)) {
         float current_time = glfwGetTime();
@@ -203,19 +148,20 @@ int main(void) {
         projection = glm::perspective(glm::radians(active_camera.FOV), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
         glm::mat4 view = active_camera.view_matrix();
 
-        glm::vec3 light_pos = glm::vec3(1.2f, 1.0f, 2.0f);
-        glm::mat4 transform = glm::mat4(1.0f);
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, light_pos);
-        model = glm::scale(model, glm::vec3(0.2f));
         lighting_shader.use();
-        transform = projection * view * model * transform;
-        lighting_shader.set_mat4("transform", transform);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
-        glBindVertexArray(light_cube_VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        for (uint8_t i = 0; i < plight_count; i++) {
+            glm::mat4 transform = glm::mat4(1.0f);
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, plight_positions[i]);
+            model = glm::scale(model, glm::vec3(0.2f));
+            transform = projection * view * model * transform;
+            lighting_shader.set_mat4("transform", transform);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
+            glBindVertexArray(light_cube_VAO);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
 
-        model = glm::mat4(1.0f);
+        glm::mat4 model = glm::mat4(1.0f);
         glm::mat4 projection_mul_view = projection * view;
         glm::mat3 normal_matrix = glm::mat3(model);
         normal_matrix = glm::inverse(normal_matrix);
@@ -226,23 +172,26 @@ int main(void) {
         object_shader.set_mat4("projection_mul_view", projection_mul_view);
         object_shader.set_vec3("viewer_position", active_camera.position);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, container_diffuse);
+        container_diffuse.bind();
         object_shader.set_int("material.diffuse", 0);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, container_specular);
+        container_specular.bind();
         object_shader.set_int("material.specular", 1);
         object_shader.set_float("material.shininess", 128.0f);
         object_shader.set_vec3("dir_light.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
-        object_shader.set_vec3("dir_light.ambient", glm::vec3(0.05f, 0.05f, 0.05f));
-        object_shader.set_vec3("dir_light.diffuse", glm::vec3(0.4f, 0.4f, 0.4f));
-        object_shader.set_vec3("dir_light.specular", glm::vec3(0.5f, 0.5f, 0.5f));
-        object_shader.set_vec3("point_lights[0].position", light_pos);
-        object_shader.set_vec3("point_lights[0].ambient", glm::vec3(0.2f, 0.2f, 0.2f));
-        object_shader.set_vec3("point_lights[0].diffuse", glm::vec3(0.5f, 0.5f, 0.5f));
-        object_shader.set_vec3("point_lights[0].specular", glm::vec3(1.0f, 1.0f, 1.0f));
-        object_shader.set_float("point_lights[0].constant", 1.0f);
-        object_shader.set_float("point_lights[0].linear", 0.09f);
-        object_shader.set_float("point_lights[0].quadratic", 0.032f);
+        object_shader.set_vec3("dir_light.ambient", dir_light.ambient);
+        object_shader.set_vec3("dir_light.diffuse", dir_light.diffuse);
+        object_shader.set_vec3("dir_light.specular", dir_light.specular);
+        for (uint8_t i = 0; i < plight_count; i++) {
+            std::string index = "point_lights[" + std::to_string(i) + "].";
+            object_shader.set_vec3(index + "position", plight_positions[i]);
+            object_shader.set_vec3(index + "ambient", plights[i].ambient);
+            object_shader.set_vec3(index + "diffuse", plights[i].diffuse);
+            object_shader.set_vec3(index + "specular", plights[i].specular);
+            object_shader.set_float(index + "constant_factor", plights[i].constant_factor);
+            object_shader.set_float(index + "linear_factor", plights[i].linear_factor);
+            object_shader.set_float(index + "quadratic_factor", plights[i].quadratic_factor);
+        }
         glBufferData(GL_ARRAY_BUFFER, sizeof(CUBE_VERTICES), CUBE_VERTICES, GL_STATIC_DRAW);
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
