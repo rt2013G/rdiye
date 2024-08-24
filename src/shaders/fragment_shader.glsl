@@ -29,7 +29,7 @@ struct PointLight {
     float linear_factor;
     float quadratic_factor;
 };
-#define POINT_LIGHT_COUNT 2
+#define POINT_LIGHT_COUNT 3
 
 uniform Material material;
 uniform DirectionalLight dir_light;

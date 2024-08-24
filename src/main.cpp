@@ -11,7 +11,8 @@
 
 #include "camera.hpp"
 #include "data.hpp"
-#include "lights.hpp"
+#include "lighting.hpp"
+#include "model.hpp"
 #include "shader.hpp"
 #include "texture.hpp"
 
@@ -101,39 +102,32 @@ int main(void) {
     ShaderProgram object_shader("src/shaders/vertex_shader.glsl", "src/shaders/fragment_shader.glsl");
     ShaderProgram lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
 
-    GLuint VBO, VAO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
+    Mesh container_mesh;
+    build_mesh(container_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
 
     Texture container_diffuse = Texture("assets/container2.png");
     Texture container_specular = Texture("assets/container2_s.png");
 
-    GLuint light_cube_VAO;
+    GLuint light_cube_VAO, light_cube_VBO;
     glGenVertexArrays(1, &light_cube_VAO);
+    glGenBuffers(1, &light_cube_VBO);
     glBindVertexArray(light_cube_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, light_cube_VBO);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
-    float last_time = 0.0f;
-
-    uint8_t plight_count = 2;
+    uint8_t plight_count = 3;
     PointLight *plights = (PointLight *)malloc(sizeof(PointLight) * plight_count);
     glm::vec3 *plight_positions = (glm::vec3 *)malloc(sizeof(glm::vec3) * plight_count);
     plight_positions[0] = glm::vec3(1.2f, 1.0f, 2.0f);
     plight_positions[1] = glm::vec3(1.2f, 3.0f, 1.0f);
+    plight_positions[2] = glm::vec3(1.2f, -3.0f, 1.0f);
     create_white_point_lights(plights, plight_positions, plight_count);
 
     DirectionalLight dir_light;
     create_dir_light(dir_light);
+
+    float last_time = 0.0f;
 
     while (!glfwWindowShouldClose(window)) {
         float current_time = glfwGetTime();
@@ -171,30 +165,10 @@ int main(void) {
         object_shader.set_mat4("model", model);
         object_shader.set_mat4("projection_mul_view", projection_mul_view);
         object_shader.set_vec3("viewer_position", active_camera.position);
-        glActiveTexture(GL_TEXTURE0);
-        container_diffuse.bind();
-        object_shader.set_int("material.diffuse", 0);
-        glActiveTexture(GL_TEXTURE1);
-        container_specular.bind();
-        object_shader.set_int("material.specular", 1);
         object_shader.set_float("material.shininess", 128.0f);
-        object_shader.set_vec3("dir_light.direction", glm::vec3(-0.2f, -1.0f, -0.3f));
-        object_shader.set_vec3("dir_light.ambient", dir_light.ambient);
-        object_shader.set_vec3("dir_light.diffuse", dir_light.diffuse);
-        object_shader.set_vec3("dir_light.specular", dir_light.specular);
-        for (uint8_t i = 0; i < plight_count; i++) {
-            std::string index = "point_lights[" + std::to_string(i) + "].";
-            object_shader.set_vec3(index + "position", plight_positions[i]);
-            object_shader.set_vec3(index + "ambient", plights[i].ambient);
-            object_shader.set_vec3(index + "diffuse", plights[i].diffuse);
-            object_shader.set_vec3(index + "specular", plights[i].specular);
-            object_shader.set_float(index + "constant_factor", plights[i].constant_factor);
-            object_shader.set_float(index + "linear_factor", plights[i].linear_factor);
-            object_shader.set_float(index + "quadratic_factor", plights[i].quadratic_factor);
-        }
-        glBufferData(GL_ARRAY_BUFFER, sizeof(CUBE_VERTICES), CUBE_VERTICES, GL_STATIC_DRAW);
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        set_shader_dir_light(object_shader, dir_light, glm::vec3(-0.2f, -1.0f, -0.3f));
+        set_shader_point_lights(object_shader, plights, plight_positions, plight_count);
+        draw_mesh(container_mesh, object_shader, container_diffuse, container_specular);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
