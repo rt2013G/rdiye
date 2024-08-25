@@ -97,16 +97,17 @@ int main(void) {
 
     glEnable(GL_DEPTH_TEST);
 
-    stbi_set_flip_vertically_on_load(true);
-
     ShaderProgram object_shader("src/shaders/vertex_shader.glsl", "src/shaders/fragment_shader.glsl");
     ShaderProgram lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
-
-    Mesh container_mesh;
-    build_mesh(container_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
+    ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
 
     Texture container_diffuse = Texture("assets/container2.png");
     Texture container_specular = Texture("assets/container2_s.png");
+
+    Material container_mat = {container_diffuse.id, container_specular.id, 128};
+
+    Mesh container_mesh;
+    load_mesh(container_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
 
     GLuint light_cube_VAO, light_cube_VBO;
     glGenVertexArrays(1, &light_cube_VAO);
@@ -126,6 +127,18 @@ int main(void) {
 
     DirectionalLight dir_light;
     create_dir_light(dir_light);
+
+    Mesh skybox_mesh;
+    load_skybox_mesh(skybox_mesh, sizeof(SKYBOX_VERTICES), &SKYBOX_VERTICES[0]);
+    std::string cubemap_faces[] = {
+        "assets/skybox/right.jpg",
+        "assets/skybox/left.jpg",
+        "assets/skybox/top.jpg",
+        "assets/skybox/bottom.jpg",
+        "assets/skybox/front.jpg",
+        "assets/skybox/back.jpg",
+    };
+    GLuint skybox_texture = load_cubemap_texture(cubemap_faces, 6);
 
     float last_time = 0.0f;
 
@@ -165,10 +178,18 @@ int main(void) {
         object_shader.set_mat4("model", model);
         object_shader.set_mat4("projection_mul_view", projection_mul_view);
         object_shader.set_vec3("viewer_position", active_camera.position);
-        object_shader.set_float("material.shininess", 128.0f);
         set_shader_dir_light(object_shader, dir_light, glm::vec3(-0.2f, -1.0f, -0.3f));
         set_shader_point_lights(object_shader, plights, plight_positions, plight_count);
-        draw_mesh(container_mesh, object_shader, container_diffuse, container_specular);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture);
+        object_shader.set_int("environment_cubemap", 2);
+        draw_material_mesh(container_mesh, object_shader, container_mat);
+
+        skybox_shader.use();
+        view = glm::mat4(glm::mat3(active_camera.view_matrix()));
+        skybox_shader.set_mat4("projection", projection);
+        skybox_shader.set_mat4("view", view);
+        draw_skybox(skybox_mesh, skybox_shader, skybox_texture);
 
         glfwSwapBuffers(window);
         glfwPollEvents();

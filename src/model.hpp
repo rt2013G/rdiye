@@ -6,12 +6,18 @@
 #include "shader.hpp"
 #include "texture.hpp"
 
+struct Material {
+    GLuint diffuse_id;
+    GLuint specular_id;
+    float shininess;
+};
+
 struct Mesh {
     GLuint VAO, VBO;
     uint32_t vertices_size;
 };
 
-void build_mesh(Mesh &mesh, uint32_t vertices_size, const float *vertices) {
+void load_mesh(Mesh &mesh, uint32_t vertices_size, const float *vertices) {
     glGenVertexArrays(1, &mesh.VAO);
     glGenBuffers(1, &mesh.VBO);
     glBindVertexArray(mesh.VAO);
@@ -27,13 +33,14 @@ void build_mesh(Mesh &mesh, uint32_t vertices_size, const float *vertices) {
     glBindVertexArray(0);
 }
 
-void draw_mesh(Mesh &mesh, ShaderProgram &shader, Texture &diffuse, Texture &specular) {
+void draw_material_mesh(Mesh &mesh, ShaderProgram &shader, Material mat) {
     glActiveTexture(GL_TEXTURE0);
-    diffuse.bind();
+    glBindTexture(GL_TEXTURE_2D, mat.diffuse_id);
     shader.set_int("material.diffuse", 0);
     glActiveTexture(GL_TEXTURE1);
-    specular.bind();
+    glBindTexture(GL_TEXTURE_2D, mat.specular_id);
     shader.set_int("material.specular", 1);
+    shader.set_float("material.shininess", mat.shininess);
     glBindVertexArray(mesh.VAO);
     glDrawArrays(GL_TRIANGLES, 0, mesh.vertices_size / (sizeof(float) * 8));
     glBindVertexArray(0);
@@ -45,15 +52,15 @@ struct EBOMesh {
     uint32_t indices_len;
 };
 
-void build_EBOmesh(EBOMesh &mesh, float *vertices, uint32_t vertices_len, GLuint *indices, uint32_t indices_len) {
+void load_EBOmesh(EBOMesh &mesh, uint32_t vertices_size, float *vertices, uint32_t indices_len, GLuint *indices) {
     glGenVertexArrays(1, &mesh.VAO);
     glGenBuffers(1, &mesh.VBO);
     glGenBuffers(1, &mesh.EBO);
     glBindVertexArray(mesh.VAO);
     glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * vertices_len, vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, vertices_size, vertices, GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * indices_len, indices, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_len * sizeof(GLuint), indices, GL_STATIC_DRAW);
     mesh.indices_len = indices_len;
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
@@ -64,17 +71,42 @@ void build_EBOmesh(EBOMesh &mesh, float *vertices, uint32_t vertices_len, GLuint
     glBindVertexArray(0);
 }
 
-void draw_EBOmesh(EBOMesh &mesh, ShaderProgram &shader, Texture &diffuse, Texture &specular) {
+void draw_material_EBOmesh(EBOMesh &mesh, ShaderProgram &shader, Material mat) {
     glActiveTexture(GL_TEXTURE0);
-    diffuse.bind();
+    glBindTexture(GL_TEXTURE_2D, mat.diffuse_id);
     shader.set_int("material.diffuse", 0);
     glActiveTexture(GL_TEXTURE1);
-    specular.bind();
+    glBindTexture(GL_TEXTURE_2D, mat.specular_id);
     shader.set_int("material.specular", 1);
+    shader.set_float("material.shininess", mat.shininess);
     glBindVertexArray(mesh.VAO);
     glDrawElements(GL_TRIANGLES, mesh.indices_len, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE0);
+}
+
+void load_skybox_mesh(Mesh &mesh, uint32_t vertices_size, const float *vertices) {
+    glGenVertexArrays(1, &mesh.VAO);
+    glGenBuffers(1, &mesh.VBO);
+    glBindVertexArray(mesh.VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+    mesh.vertices_size = vertices_size;
+    glBufferData(GL_ARRAY_BUFFER, vertices_size, vertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+    glBindVertexArray(0);
+}
+
+void draw_skybox(Mesh &skybox_mesh, ShaderProgram &shader, GLuint skybox_texture) {
+    glDepthFunc(GL_LEQUAL);
+    glBindVertexArray(skybox_mesh.VAO);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture);
+    shader.set_int("skybox_cubemap", 0);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glDepthMask(GL_TRUE);
+    glBindVertexArray(0);
+    glDepthFunc(GL_LESS);
 }
 
 #endif

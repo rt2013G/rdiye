@@ -35,6 +35,7 @@ uniform Material material;
 uniform DirectionalLight dir_light;
 uniform PointLight point_lights[POINT_LIGHT_COUNT];
 uniform vec3 viewer_position;
+uniform samplerCube environment_cubemap;
 
 vec3 calculate_directional_light(DirectionalLight dir_light, vec3 normal, vec3 view_direction);
 vec3 calculate_point_light(PointLight p_light, vec3 normal, vec3 fragment_position, vec3 view_direction);
@@ -47,7 +48,13 @@ void main() {
     for (int i = 0; i < POINT_LIGHT_COUNT; i++) {
         color_output += calculate_point_light(point_lights[i], normalized_normal, fragment_position, view_direction);
     }
-    frag_color = vec4(color_output, 1.0);
+    float ratio_water = 1.00 / 1.33;
+    float ratio_glass = 1.00 / 1.52;
+    float ratio_diamond = 1.00 / 2.42;
+    vec3 I = normalize(fragment_position - viewer_position);
+    vec3 R = refract(I, normalized_normal, ratio_diamond);
+    vec3 environ = texture(environment_cubemap, R).rgb;
+    frag_color = vec4(color_output, 1.0) * vec4(environ, 1.0);
 }
 
 vec3 calculate_directional_light(DirectionalLight dir_light, vec3 normal, vec3 view_direction) {
