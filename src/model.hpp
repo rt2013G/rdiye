@@ -104,7 +104,6 @@ void draw_skybox(Mesh &skybox_mesh, ShaderProgram &shader, GLuint skybox_texture
     glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture);
     shader.set_int("skybox_cubemap", 0);
     glDrawArrays(GL_TRIANGLES, 0, 36);
-    glDepthMask(GL_TRUE);
     glBindVertexArray(0);
     glDepthFunc(GL_LESS);
 }

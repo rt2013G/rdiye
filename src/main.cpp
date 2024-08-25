@@ -100,6 +100,8 @@ int main(void) {
     ShaderProgram object_shader("src/shaders/vertex_shader.glsl", "src/shaders/fragment_shader.glsl");
     ShaderProgram lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
     ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
+    ShaderProgram plane_shader("src/shaders/floor_vs.glsl", "src/shaders/floor_fs.glsl");
+    ShaderProgram shadow_shader("src/shaders/shadow_map_vs.glsl", "src/shaders/shadow_map_fs.glsl");
 
     Texture container_diffuse = Texture("assets/container2.png");
     Texture container_specular = Texture("assets/container2_s.png");
@@ -114,8 +116,9 @@ int main(void) {
     glGenBuffers(1, &light_cube_VBO);
     glBindVertexArray(light_cube_VAO);
     glBindBuffer(GL_ARRAY_BUFFER, light_cube_VBO);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
 
     uint8_t plight_count = 3;
     PointLight *plights = (PointLight *)malloc(sizeof(PointLight) * plight_count);
@@ -140,6 +143,31 @@ int main(void) {
     };
     GLuint skybox_texture = load_cubemap_texture(cubemap_faces, 6);
 
+    Mesh plane_mesh;
+    load_mesh(plane_mesh, sizeof(PLANE_VERTICES), PLANE_VERTICES);
+    Texture plane_diffuse = Texture("assets/wood.png");
+    Material plane_mat = {plane_diffuse.id, plane_diffuse.id, 4};
+
+    const uint16_t SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
+    GLuint shadow_map_FBO;
+    glGenFramebuffers(1, &shadow_map_FBO);
+    GLuint shadow_map;
+    glGenTextures(1, &shadow_map);
+    glBindTexture(GL_TEXTURE_2D, shadow_map);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
+                 SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float shadow_border_clamp[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, shadow_border_clamp);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadow_map_FBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadow_map, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     float last_time = 0.0f;
 
     while (!glfwWindowShouldClose(window)) {
@@ -149,6 +177,24 @@ int main(void) {
 
         process_input(window);
 
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, shadow_map_FBO);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glCullFace(GL_FRONT);
+        const float light_near_plane = 1.0f, light_far_plane = 7.5f;
+        glm::mat4 light_projection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, light_near_plane, light_far_plane);
+        glm::mat4 light_view = glm::lookAt(glm::vec3(0.5f, 4.0f, 2.0f),
+                                           glm::vec3(0.0f, 0.0f, 0.0f),
+                                           glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 light_space_matrix = light_projection * light_view;
+        shadow_shader.use();
+        shadow_shader.set_mat4("light_space_matrix", light_space_matrix);
+        shadow_shader.set_mat4("model", glm::mat4(1.0f));
+        draw_material_mesh(container_mesh, shadow_shader, container_mat);
+        glCullFace(GL_BACK);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
         glClearColor(0.2, 0.2, 0.2, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -163,7 +209,6 @@ int main(void) {
             model = glm::scale(model, glm::vec3(0.2f));
             transform = projection * view * model * transform;
             lighting_shader.set_mat4("transform", transform);
-            glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
             glBindVertexArray(light_cube_VAO);
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
@@ -184,6 +229,20 @@ int main(void) {
         glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture);
         object_shader.set_int("environment_cubemap", 2);
         draw_material_mesh(container_mesh, object_shader, container_mat);
+
+        plane_shader.use();
+        plane_shader.set_mat3("normal_matrix", normal_matrix);
+        model = glm::translate(model, glm::vec3(0.0f, -2.0f, 0.0f));
+        plane_shader.set_mat4("model", model);
+        plane_shader.set_mat4("projection_mul_view", projection_mul_view);
+        plane_shader.set_vec3("viewer_position", active_camera.position);
+        set_shader_dir_light(plane_shader, dir_light, glm::vec3(-0.2f, -1.0f, -0.3f));
+        set_shader_point_lights(plane_shader, plights, plight_positions, plight_count);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, shadow_map);
+        plane_shader.set_int("shadow_map", 2);
+        plane_shader.set_mat4("light_space_matrix", light_space_matrix);
+        draw_material_mesh(plane_mesh, plane_shader, plane_mat);
 
         skybox_shader.use();
         view = glm::mat4(glm::mat3(active_camera.view_matrix()));
