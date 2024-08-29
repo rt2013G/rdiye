@@ -36,12 +36,15 @@ uniform DirectionalLight dir_light;
 uniform PointLight point_lights[POINT_LIGHT_COUNT];
 uniform vec3 viewer_position;
 uniform samplerCube environment_cubemap;
+uniform sampler2D normal_map;
 
 vec3 calculate_directional_light(DirectionalLight dir_light, vec3 normal, vec3 view_direction);
 vec3 calculate_point_light(PointLight p_light, vec3 normal, vec3 fragment_position, vec3 view_direction);
 
 void main() {
-    vec3 normalized_normal = normalize(normal);
+    vec3 normalized_normal = texture(normal_map, texture_coord).rgb;
+    normalized_normal = normalize(normalized_normal * 2.0 - 1.0);
+    //vec3 normalized_normal = normalize(normal);
     vec3 view_direction = normalize(viewer_position - fragment_position);
 
     vec3 color_output = calculate_directional_light(dir_light, normalized_normal, view_direction);
@@ -54,6 +57,7 @@ void main() {
     vec3 I = normalize(fragment_position - viewer_position);
     vec3 R = refract(I, normalized_normal, ratio_diamond);
     vec3 environ = texture(environment_cubemap, R).rgb;
+    // vec3 environ = vec3(1.0);
     frag_color = vec4(color_output, 1.0) * vec4(environ, 1.0);
 }
 

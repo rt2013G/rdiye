@@ -168,6 +168,12 @@ int main(void) {
     glReadBuffer(GL_NONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+    Mesh wall_mesh;
+    load_mesh(wall_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
+    Texture wall_diffuse = Texture("assets/brickwall.jpg");
+    Texture wall_normal = Texture("assets/brickwall_n.jpg");
+    Material wall_mat = {wall_diffuse.id, container_specular.id, 128};
+
     float last_time = 0.0f;
 
     while (!glfwWindowShouldClose(window)) {
@@ -230,10 +236,26 @@ int main(void) {
         object_shader.set_int("environment_cubemap", 2);
         draw_material_mesh(container_mesh, object_shader, container_mat);
 
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(2.0f, 2.0f, 2.0f));
+        object_shader.set_mat4("model", model);
+        normal_matrix = glm::mat3(model);
+        normal_matrix = glm::inverse(normal_matrix);
+        normal_matrix = glm::transpose(normal_matrix);
+        object_shader.set_mat3("normal_matrix", normal_matrix);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, wall_normal.id);
+        object_shader.set_int("normal_map", 3);
+        draw_material_mesh(wall_mesh, object_shader, wall_mat);
+
         plane_shader.use();
-        plane_shader.set_mat3("normal_matrix", normal_matrix);
+        model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(0.0f, -2.0f, 0.0f));
+        normal_matrix = glm::mat3(model);
+        normal_matrix = glm::inverse(normal_matrix);
+        normal_matrix = glm::transpose(normal_matrix);
         plane_shader.set_mat4("model", model);
+        plane_shader.set_mat3("normal_matrix", normal_matrix);
         plane_shader.set_mat4("projection_mul_view", projection_mul_view);
         plane_shader.set_vec3("viewer_position", active_camera.position);
         set_shader_dir_light(plane_shader, dir_light, glm::vec3(-0.2f, -1.0f, -0.3f));
