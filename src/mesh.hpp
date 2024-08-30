@@ -1,5 +1,5 @@
-#ifndef MODEL_HPP
-#define MODEL_HPP
+#ifndef MESH_HPP
+#define MESH_HPP
 
 #include "glad/glad.h"
 
@@ -25,6 +25,13 @@ void load_mesh(Mesh &mesh, uint32_t vertices_size, const float *vertices) {
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
     glBindVertexArray(0);
+}
+
+void draw_mesh(Mesh &mesh, ShaderProgram &shader) {
+    glBindVertexArray(mesh.VAO);
+    glDrawArrays(GL_TRIANGLES, 0, mesh.vertices_size / (sizeof(float) * 8));
+    glBindVertexArray(0);
+    glActiveTexture(GL_TEXTURE0);
 }
 
 void draw_material_mesh(Mesh &mesh, ShaderProgram &shader, Material mat) {

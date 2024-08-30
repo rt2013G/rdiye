@@ -83,12 +83,34 @@ struct Material {
     GLuint parallax_map;
 };
 
-void load_material(Material &mat, std::string diffuse_name, std::string specular_name = "missing_texture.png", float shininess = 0, std::string normal_name = "missing_texture.png", std::string parallax_name = "missing_texture.png") {
-    mat.diffuse = load_texture(diffuse_name);
-    mat.specular = load_texture(specular_name);
-    mat.shininess = shininess;
-    mat.normal_map = load_texture(normal_name);
-    mat.parallax_map = load_texture(parallax_name);
+void load_material(Material &material, std::string diffuse_name, std::string specular_name = "missing_texture.png", float shininess = 1, std::string normal_name = "default_normal_map.png", std::string parallax_name = "missing_texture.png") {
+    material.diffuse = load_texture(diffuse_name);
+    material.specular = load_texture(specular_name);
+    material.shininess = shininess;
+    material.normal_map = load_texture(normal_name);
+    material.parallax_map = load_texture(parallax_name);
+}
+
+void set_shader_material(ShaderProgram &shader, Material &material) {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, material.diffuse);
+    shader.set_int("material.diffuse", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, material.specular);
+    shader.set_int("material.specular", 1);
+
+    shader.set_float("material.shininess", material.shininess);
+
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, material.normal_map);
+    shader.set_int("material.normal_map", 2);
+
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, material.parallax_map);
+    shader.set_int("material.parallax_map", 3);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 struct PBRMaterial {

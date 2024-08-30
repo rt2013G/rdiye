@@ -13,7 +13,7 @@
 #include "data.hpp"
 #include "lighting.hpp"
 #include "material.hpp"
-#include "model.hpp"
+#include "mesh.hpp"
 #include "shader.hpp"
 
 #define WINDOW_WIDTH 1920
@@ -97,37 +97,9 @@ int main(void) {
 
     glEnable(GL_DEPTH_TEST);
 
-    ShaderProgram object_shader("src/shaders/vertex_shader.glsl", "src/shaders/fragment_shader.glsl");
     ShaderProgram lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
     ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
-    ShaderProgram plane_shader("src/shaders/floor_vs.glsl", "src/shaders/floor_fs.glsl");
-    ShaderProgram shadow_shader("src/shaders/shadow_map_vs.glsl", "src/shaders/shadow_map_fs.glsl");
-
-    Material container_mat;
-    load_material(container_mat, "container2.png", "container2_s.png", 128);
-
-    Mesh container_mesh;
-    load_mesh(container_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
-
-    GLuint light_cube_VAO, light_cube_VBO;
-    glGenVertexArrays(1, &light_cube_VAO);
-    glGenBuffers(1, &light_cube_VBO);
-    glBindVertexArray(light_cube_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, light_cube_VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
-
-    uint8_t plight_count = 3;
-    PointLight *plights = (PointLight *)malloc(sizeof(PointLight) * plight_count);
-    glm::vec3 *plight_positions = (glm::vec3 *)malloc(sizeof(glm::vec3) * plight_count);
-    plight_positions[0] = glm::vec3(1.2f, 1.0f, 2.0f);
-    plight_positions[1] = glm::vec3(1.2f, 3.0f, 1.0f);
-    plight_positions[2] = glm::vec3(1.2f, -3.0f, 1.0f);
-    create_white_point_lights(plights, plight_positions, plight_count);
-
-    DirectionalLight dir_light;
-    create_dir_light(dir_light);
+    ShaderProgram material_shader("src/shaders/material_vs.glsl", "src/shaders/material_fs.glsl");
 
     Mesh skybox_mesh;
     load_skybox_mesh(skybox_mesh, sizeof(SKYBOX_VERTICES), &SKYBOX_VERTICES[0]);
@@ -141,42 +113,41 @@ int main(void) {
     };
     GLuint skybox_texture = load_cubemap(cubemap_faces, 6);
 
+    Material container_mat;
+    load_material(container_mat, "container2.png", "container2_s.png", 128);
+    Mesh container_mesh;
+    load_mesh(container_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
+
+    Mesh wall_mesh;
+    load_mesh(wall_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
+    Material wall_mat;
+    load_material(wall_mat, "brickwall.jpg", "brickwall.jpg", 128, "brickwall_n.jpg");
+
     Mesh plane_mesh;
     load_mesh(plane_mesh, sizeof(PLANE_VERTICES), PLANE_VERTICES);
     Material plane_mat;
     load_material(plane_mat, "wood.png");
 
-    const uint16_t SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
-    GLuint shadow_map_FBO;
-    glGenFramebuffers(1, &shadow_map_FBO);
-    GLuint shadow_map;
-    glGenTextures(1, &shadow_map);
-    glBindTexture(GL_TEXTURE_2D, shadow_map);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
-                 SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    float shadow_border_clamp[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, shadow_border_clamp);
-    glBindFramebuffer(GL_FRAMEBUFFER, shadow_map_FBO);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadow_map, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLuint light_cube_VAO, light_cube_VBO;
+    glGenVertexArrays(1, &light_cube_VAO);
+    glGenBuffers(1, &light_cube_VBO);
+    glBindVertexArray(light_cube_VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, light_cube_VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
 
-    Mesh wall_mesh;
-    load_mesh(wall_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
-    Material wall_mat;
-    load_material(wall_mat, "brickwall.jpg", "missing_texture.png", 0, "brickwall_n.jpg");
+    DirectionalLight dir_light;
+    dir_light.direction = glm::vec3(-0.2f, -1.0f, -0.3f);
 
-    GLuint matrices_UBO;
-    glGenBuffers(1, &matrices_UBO);
-    glBindBuffer(GL_UNIFORM_BUFFER, matrices_UBO);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), NULL, GL_STATIC_DRAW);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    glBindBufferRange(GL_UNIFORM_BUFFER, 0, matrices_UBO, 0, sizeof(glm::mat4));
+    int32_t point_light_count = 3;
+    PointLight point_lights[MAX_POINT_LIGHT_COUNT];
+    glm::vec3 plight_positions[3] = {
+        glm::vec3(1.2f, 1.0f, 2.0f),
+        glm::vec3(1.2f, 3.0f, 1.0f),
+        glm::vec3(1.2f, -3.0f, 1.0f),
+    };
+    load_point_lights(point_lights, plight_positions, point_light_count);
 
     float last_time = 0.0f;
 
@@ -187,36 +158,15 @@ int main(void) {
 
         process_input(window);
 
-        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-        glBindFramebuffer(GL_FRAMEBUFFER, shadow_map_FBO);
-        glClear(GL_DEPTH_BUFFER_BIT);
-        glCullFace(GL_FRONT);
-        const float light_near_plane = 1.0f, light_far_plane = 7.5f;
-        glm::mat4 light_projection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, light_near_plane, light_far_plane);
-        glm::mat4 light_view = glm::lookAt(glm::vec3(0.5f, 4.0f, 2.0f),
-                                           glm::vec3(0.0f, 0.0f, 0.0f),
-                                           glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 light_space_matrix = light_projection * light_view;
-        shadow_shader.use();
-        shadow_shader.set_mat4("light_space_matrix", light_space_matrix);
-        shadow_shader.set_mat4("model", glm::mat4(1.0f));
-        draw_material_mesh(container_mesh, shadow_shader, container_mat);
-        glCullFace(GL_BACK);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
         glClearColor(0, 0, 0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         projection = glm::perspective(glm::radians(active_camera.FOV), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
         glm::mat4 view = active_camera.view_matrix();
         glm::mat4 projection_mul_view = projection * view;
-        glBindBuffer(GL_UNIFORM_BUFFER, matrices_UBO);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(projection_mul_view));
-        glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
         lighting_shader.use();
-        for (uint8_t i = 0; i < plight_count; i++) {
+        for (int32_t i = 0; i < point_light_count; i++) {
             glm::mat4 transform = glm::mat4(1.0f);
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, plight_positions[i]);
@@ -227,57 +177,44 @@ int main(void) {
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
 
-        glm::mat4 model = glm::mat4(1.0f);
+        material_shader.use();
+        material_shader.set_mat4("projection_mul_view", projection_mul_view);
+        material_shader.set_vec3("viewer_position", active_camera.position);
+        set_shader_lighting_data(material_shader, dir_light, point_lights, point_light_count);
 
+        glm::mat4 model = glm::mat4(1.0f);
         glm::mat3 normal_matrix = glm::mat3(model);
         normal_matrix = glm::inverse(normal_matrix);
         normal_matrix = glm::transpose(normal_matrix);
-        object_shader.use();
-        object_shader.set_mat3("normal_matrix", normal_matrix);
-        object_shader.set_mat4("model", model);
-        object_shader.set_mat4("projection_mul_view", projection_mul_view);
-        object_shader.set_vec3("viewer_position", active_camera.position);
-        set_shader_dir_light(object_shader, dir_light, glm::vec3(-0.2f, -1.0f, -0.3f));
-        set_shader_point_lights(object_shader, plights, plight_positions, plight_count);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture);
-        object_shader.set_int("environment_cubemap", 2);
-        draw_material_mesh(container_mesh, object_shader, container_mat);
+        material_shader.set_mat3("normal_matrix", normal_matrix);
+        material_shader.set_mat4("model", model);
+        set_shader_material(material_shader, container_mat);
+        draw_mesh(container_mesh, material_shader);
 
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(2.0f, 2.0f, 2.0f));
-        object_shader.set_mat4("model", model);
+        material_shader.set_mat4("model", model);
         normal_matrix = glm::mat3(model);
         normal_matrix = glm::inverse(normal_matrix);
         normal_matrix = glm::transpose(normal_matrix);
-        object_shader.set_mat3("normal_matrix", normal_matrix);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, wall_mat.normal_map);
-        object_shader.set_int("normal_map", 3);
-        draw_material_mesh(wall_mesh, object_shader, wall_mat);
+        material_shader.set_mat3("normal_matrix", normal_matrix);
+        set_shader_material(material_shader, wall_mat);
+        draw_mesh(wall_mesh, material_shader);
 
-        plane_shader.use();
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(0.0f, -2.0f, 0.0f));
+        material_shader.set_mat4("model", model);
         normal_matrix = glm::mat3(model);
         normal_matrix = glm::inverse(normal_matrix);
         normal_matrix = glm::transpose(normal_matrix);
-        plane_shader.set_mat4("model", model);
-        plane_shader.set_mat3("normal_matrix", normal_matrix);
-        plane_shader.set_mat4("projection_mul_view", projection_mul_view);
-        plane_shader.set_vec3("viewer_position", active_camera.position);
-        set_shader_dir_light(plane_shader, dir_light, glm::vec3(-0.2f, -1.0f, -0.3f));
-        set_shader_point_lights(plane_shader, plights, plight_positions, plight_count);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, shadow_map);
-        plane_shader.set_int("shadow_map", 2);
-        plane_shader.set_mat4("light_space_matrix", light_space_matrix);
-        draw_material_mesh(plane_mesh, plane_shader, plane_mat);
+        material_shader.set_mat3("normal_matrix", normal_matrix);
+        set_shader_material(material_shader, plane_mat);
+        draw_mesh(plane_mesh, material_shader);
 
         skybox_shader.use();
         view = glm::mat4(glm::mat3(active_camera.view_matrix()));
-        skybox_shader.set_mat4("projection", projection);
-        skybox_shader.set_mat4("view", view);
+        projection_mul_view = projection * view;
+        skybox_shader.set_mat4("projection_mul_view", projection_mul_view);
         draw_skybox(skybox_mesh, skybox_shader, skybox_texture);
 
         glfwSwapBuffers(window);
