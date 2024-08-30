@@ -5,8 +5,8 @@
 
 #include "lib/glm/glm.hpp"
 
+#include "material.hpp"
 #include "shader.hpp"
-#include "texture.hpp"
 
 struct DirectionalLight {
     glm::vec3 ambient;

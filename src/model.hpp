@@ -3,14 +3,8 @@
 
 #include "glad/glad.h"
 
+#include "material.hpp"
 #include "shader.hpp"
-#include "texture.hpp"
-
-struct Material {
-    GLuint diffuse_id;
-    GLuint specular_id;
-    float shininess;
-};
 
 struct Mesh {
     GLuint VAO, VBO;
@@ -35,10 +29,10 @@ void load_mesh(Mesh &mesh, uint32_t vertices_size, const float *vertices) {
 
 void draw_material_mesh(Mesh &mesh, ShaderProgram &shader, Material mat) {
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, mat.diffuse_id);
+    glBindTexture(GL_TEXTURE_2D, mat.diffuse);
     shader.set_int("material.diffuse", 0);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, mat.specular_id);
+    glBindTexture(GL_TEXTURE_2D, mat.specular);
     shader.set_int("material.specular", 1);
     shader.set_float("material.shininess", mat.shininess);
     glBindVertexArray(mesh.VAO);
@@ -73,10 +67,10 @@ void load_EBOmesh(EBOMesh &mesh, uint32_t vertices_size, float *vertices, uint32
 
 void draw_material_EBOmesh(EBOMesh &mesh, ShaderProgram &shader, Material mat) {
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, mat.diffuse_id);
+    glBindTexture(GL_TEXTURE_2D, mat.diffuse);
     shader.set_int("material.diffuse", 0);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, mat.specular_id);
+    glBindTexture(GL_TEXTURE_2D, mat.specular);
     shader.set_int("material.specular", 1);
     shader.set_float("material.shininess", mat.shininess);
     glBindVertexArray(mesh.VAO);

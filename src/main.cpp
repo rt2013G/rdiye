@@ -12,9 +12,9 @@
 #include "camera.hpp"
 #include "data.hpp"
 #include "lighting.hpp"
+#include "material.hpp"
 #include "model.hpp"
 #include "shader.hpp"
-#include "texture.hpp"
 
 #define WINDOW_WIDTH 1920
 #define WINDOW_HEIGHT 1080
@@ -75,8 +75,8 @@ int main(void) {
         std::cout << "failed to initialize glfw" << std::endl;
         exit(EXIT_FAILURE);
     }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     GLFWwindow *window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "hewlloi worlsd", NULL, NULL);
     if (window == NULL) {
@@ -103,10 +103,8 @@ int main(void) {
     ShaderProgram plane_shader("src/shaders/floor_vs.glsl", "src/shaders/floor_fs.glsl");
     ShaderProgram shadow_shader("src/shaders/shadow_map_vs.glsl", "src/shaders/shadow_map_fs.glsl");
 
-    Texture container_diffuse = Texture("assets/container2.png");
-    Texture container_specular = Texture("assets/container2_s.png");
-
-    Material container_mat = {container_diffuse.id, container_specular.id, 128};
+    Material container_mat;
+    load_material(container_mat, "container2.png", "container2_s.png", 128);
 
     Mesh container_mesh;
     load_mesh(container_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
@@ -134,19 +132,19 @@ int main(void) {
     Mesh skybox_mesh;
     load_skybox_mesh(skybox_mesh, sizeof(SKYBOX_VERTICES), &SKYBOX_VERTICES[0]);
     std::string cubemap_faces[] = {
-        "assets/skybox/right.jpg",
-        "assets/skybox/left.jpg",
-        "assets/skybox/top.jpg",
-        "assets/skybox/bottom.jpg",
-        "assets/skybox/front.jpg",
-        "assets/skybox/back.jpg",
+        "skybox/right.jpg",
+        "skybox/left.jpg",
+        "skybox/top.jpg",
+        "skybox/bottom.jpg",
+        "skybox/front.jpg",
+        "skybox/back.jpg",
     };
-    GLuint skybox_texture = load_cubemap_texture(cubemap_faces, 6);
+    GLuint skybox_texture = load_cubemap(cubemap_faces, 6);
 
     Mesh plane_mesh;
     load_mesh(plane_mesh, sizeof(PLANE_VERTICES), PLANE_VERTICES);
-    Texture plane_diffuse = Texture("assets/wood.png");
-    Material plane_mat = {plane_diffuse.id, plane_diffuse.id, 4};
+    Material plane_mat;
+    load_material(plane_mat, "wood.png");
 
     const uint16_t SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
     GLuint shadow_map_FBO;
@@ -170,9 +168,15 @@ int main(void) {
 
     Mesh wall_mesh;
     load_mesh(wall_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
-    Texture wall_diffuse = Texture("assets/brickwall.jpg");
-    Texture wall_normal = Texture("assets/brickwall_n.jpg");
-    Material wall_mat = {wall_diffuse.id, container_specular.id, 128};
+    Material wall_mat;
+    load_material(wall_mat, "brickwall.jpg", "missing_texture.png", 0, "brickwall_n.jpg");
+
+    GLuint matrices_UBO;
+    glGenBuffers(1, &matrices_UBO);
+    glBindBuffer(GL_UNIFORM_BUFFER, matrices_UBO);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), NULL, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    glBindBufferRange(GL_UNIFORM_BUFFER, 0, matrices_UBO, 0, sizeof(glm::mat4));
 
     float last_time = 0.0f;
 
@@ -201,11 +205,15 @@ int main(void) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-        glClearColor(0.2, 0.2, 0.2, 1.0);
+        glClearColor(0, 0, 0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         projection = glm::perspective(glm::radians(active_camera.FOV), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, NEAR_PLANE, FAR_PLANE);
         glm::mat4 view = active_camera.view_matrix();
+        glm::mat4 projection_mul_view = projection * view;
+        glBindBuffer(GL_UNIFORM_BUFFER, matrices_UBO);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(projection_mul_view));
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
         lighting_shader.use();
         for (uint8_t i = 0; i < plight_count; i++) {
@@ -220,7 +228,7 @@ int main(void) {
         }
 
         glm::mat4 model = glm::mat4(1.0f);
-        glm::mat4 projection_mul_view = projection * view;
+
         glm::mat3 normal_matrix = glm::mat3(model);
         normal_matrix = glm::inverse(normal_matrix);
         normal_matrix = glm::transpose(normal_matrix);
@@ -244,7 +252,7 @@ int main(void) {
         normal_matrix = glm::transpose(normal_matrix);
         object_shader.set_mat3("normal_matrix", normal_matrix);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, wall_normal.id);
+        glBindTexture(GL_TEXTURE_2D, wall_mat.normal_map);
         object_shader.set_int("normal_map", 3);
         draw_material_mesh(wall_mesh, object_shader, wall_mat);
 
