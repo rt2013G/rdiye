@@ -11,7 +11,10 @@
 
 #include "shader.hpp"
 
-const static std::string ASSETS_FOLDER = "assets/";
+#define ASSETS_FOLDER "assets/"
+#define TEXTURE_DEFAULT_BLACK "TEXTURE_DEFAULT_BLACK.png"
+#define TEXTURE_DEFAULT_NORMAL_MAP "TEXTURE_DEFAULT_NORMAL_MAP.png"
+
 static std::unordered_map<std::string, GLuint> global_loaded_textures;
 
 GLuint load_texture(std::string filename) {
@@ -78,6 +81,9 @@ GLuint load_cubemap(std::string *face_names, unsigned int face_len) {
 }
 
 struct Material {
+    glm::vec3 ambient_color;
+    glm::vec3 diffuse_color;
+    glm::vec3 specular_color;
     GLuint diffuse;
     GLuint specular;
     float shininess;
@@ -85,7 +91,12 @@ struct Material {
     GLuint parallax_map;
 };
 
-void load_material(Material &material, std::string diffuse_name, std::string specular_name = "missing_texture.png", float shininess = 1, std::string normal_name = "default_normal_map.png", std::string parallax_name = "missing_texture.png") {
+void load_material(Material &material, std::string diffuse_name = TEXTURE_DEFAULT_BLACK, std::string specular_name = TEXTURE_DEFAULT_BLACK, float shininess = 1,
+                   std::string normal_name = TEXTURE_DEFAULT_NORMAL_MAP, std::string parallax_name = TEXTURE_DEFAULT_BLACK,
+                   glm::vec3 ambient_color = glm::vec3(1.0f), glm::vec3 diffuse_color = glm::vec3(1.0f), glm::vec3 specular_color = glm::vec3(1.0f)) {
+    material.ambient_color = ambient_color;
+    material.diffuse_color = diffuse_color;
+    material.specular_color = specular_color;
     material.diffuse = load_texture(diffuse_name);
     material.specular = load_texture(specular_name);
     material.shininess = shininess;
@@ -94,6 +105,10 @@ void load_material(Material &material, std::string diffuse_name, std::string spe
 }
 
 void set_material_in_shader(Material &mat, ShaderProgram &shader) {
+    shader.set_vec3("material.ambient_color", mat.ambient_color);
+    shader.set_vec3("material.diffuse_color", mat.diffuse_color);
+    shader.set_vec3("material.specular_color", mat.specular_color);
+
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, mat.diffuse);
     shader.set_int("material.diffuse", 0);

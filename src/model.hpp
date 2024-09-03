@@ -100,24 +100,7 @@ void load_mesh(Mesh &mesh, std::vector<Vertex> vertices, std::vector<uint32_t> i
 }
 
 void draw_mesh(Mesh &mesh, ShaderProgram &shader) {
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, mesh.material.diffuse);
-    shader.set_int("material.diffuse", 0);
-
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, mesh.material.specular);
-    shader.set_int("material.specular", 1);
-
-    shader.set_float("material.shininess", mesh.material.shininess);
-
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, mesh.material.normal_map);
-    shader.set_int("material.normal_map", 2);
-
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, mesh.material.parallax_map);
-    shader.set_int("material.parallax_map", 3);
-
+    set_material_in_shader(mesh.material, shader);
     glBindVertexArray(mesh.VAO);
     glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
@@ -132,9 +115,9 @@ struct Model {
 void load_assimp_material(Material &material, aiMaterial *assimp_mat, std::string directory) {
     aiString texture_filename;
     std::string diffuse_name;
-    std::string specular_name = "missing_texture.png";
-    std::string normal_name = "default_normal_map.png";
-    std::string parallax_name = "missing_texture.png";
+    std::string specular_name = TEXTURE_DEFAULT_BLACK;
+    std::string normal_name = TEXTURE_DEFAULT_NORMAL_MAP;
+    std::string parallax_name = TEXTURE_DEFAULT_BLACK;
 
     if (assimp_mat->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
         assimp_mat->GetTexture(aiTextureType_DIFFUSE, 0, &texture_filename);
@@ -142,8 +125,6 @@ void load_assimp_material(Material &material, aiMaterial *assimp_mat, std::strin
     } else if (assimp_mat->GetTextureCount(aiTextureType_BASE_COLOR) > 0) {
         assimp_mat->GetTexture(aiTextureType_BASE_COLOR, 0, &texture_filename);
         diffuse_name = directory + '/' + texture_filename.C_Str();
-    } else {
-        std::cout << "ERROR, texture missing diffuse: " << directory << std::endl;
     }
     if (assimp_mat->GetTextureCount(aiTextureType_SPECULAR) > 0) {
         assimp_mat->GetTexture(aiTextureType_SPECULAR, 0, &texture_filename);
@@ -158,12 +139,21 @@ void load_assimp_material(Material &material, aiMaterial *assimp_mat, std::strin
         parallax_name = directory + '/' + texture_filename.C_Str();
     }
 
-    float shininess = 1.0f;
-    if (assimp_mat->Get(AI_MATKEY_SHININESS, shininess) == aiReturn_FAILURE) {
-        shininess = 1.0f;
-    };
+    aiColor3D color(0.0f, 0.0f, 0.0f);
 
-    load_material(material, diffuse_name, specular_name, shininess, normal_name, parallax_name);
+    assimp_mat->Get(AI_MATKEY_COLOR_AMBIENT, color);
+    glm::vec3 ambient_color = glm::vec3(color.r, color.b, color.g);
+
+    assimp_mat->Get(AI_MATKEY_COLOR_DIFFUSE, color);
+    glm::vec3 diffuse_color = glm::vec3(color.r, color.b, color.g);
+
+    assimp_mat->Get(AI_MATKEY_COLOR_SPECULAR, color);
+    glm::vec3 specular_color = glm::vec3(color.r, color.b, color.g);
+
+    float shininess = 1.0f;
+    assimp_mat->Get(AI_MATKEY_SHININESS, shininess);
+
+    load_material(material, diffuse_name, specular_name, shininess, normal_name, parallax_name, ambient_color, diffuse_color, specular_color);
 }
 
 Mesh process_model_mesh(Model &model, aiMesh *mesh, const aiScene *scene) {

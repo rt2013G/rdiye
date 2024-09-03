@@ -11,6 +11,9 @@ in VS_OUT {
 } SHADER_INPUT;
 
 struct Material {
+    vec3 ambient_color;
+    vec3 diffuse_color;
+    vec3 specular_color;
     sampler2D diffuse;
     sampler2D specular;
     float shininess;
@@ -67,7 +70,7 @@ vec3 get_directional_light_contribution(DirectionalLight dlight, vec3 normal, ve
     vec3 ambient = dlight.ambient * vec3(texture(material.diffuse, SHADER_INPUT.texture_coord));
     vec3 diffuse = dlight.diffuse * diffuse_strength * vec3(texture(material.diffuse, SHADER_INPUT.texture_coord));
     vec3 specular = dlight.specular * specular_strength * vec3(texture(material.specular, SHADER_INPUT.texture_coord));
-    vec3 result = ambient + diffuse + specular;
+    vec3 result = ambient * material.ambient_color + diffuse * material.diffuse_color + specular * material.specular_color;
     return result;
 }
 
@@ -84,6 +87,6 @@ vec3 get_point_light_contribution(PointLight plight, vec3 normal, vec3 view_dir,
     vec3 ambient = attenuation * plight.ambient * vec3(texture(material.diffuse, SHADER_INPUT.texture_coord));
     vec3 diffuse = attenuation * plight.diffuse * diffuse_strength * vec3(texture(material.diffuse, SHADER_INPUT.texture_coord));
     vec3 specular = attenuation * plight.specular * specular_strength * vec3(texture(material.specular, SHADER_INPUT.texture_coord));
-    vec3 result = ambient + diffuse + specular;
+    vec3 result = ambient * material.ambient_color + diffuse * material.diffuse_color + specular * material.specular_color;
     return result;
 }

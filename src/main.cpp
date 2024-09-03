@@ -151,8 +151,8 @@ int main(void) {
     load_point_lights(point_lights, plight_positions, point_light_count);
 
     GameObject backpack = GameObject(material_shader, "backpack/backpack.obj");
-    backpack.move(glm::vec3(2.0f, -2.0f, 0.0f));
-    backpack.scale(glm::vec3(0.2f));
+    backpack.move(glm::vec3(2.0f, -2.0f, -4.0f));
+    backpack.scale(glm::vec3(0.25f, 0.25f, 0.25f));
 
     float last_time = 0.0f;
 
@@ -204,11 +204,6 @@ int main(void) {
         material_shader.set_mat3("normal_matrix", normal_matrix);
         draw_basic_mesh(wall_mesh, material_shader, wall_mat);
 
-        backpack.move(glm::vec3(sin(glfwGetTime()) * 2 * delta_time, 0.0f, 0.0f));
-        backpack.rotate(glm::vec3(0.0f, 1.0f, 0.0f), 15.0f * delta_time);
-        backpack.scale(glm::vec3(1.0f + 0.1f * delta_time));
-        backpack.render();
-
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(0.0f, -2.0f, 0.0f));
         material_shader.set_mat4("model", model);
@@ -217,6 +212,8 @@ int main(void) {
         normal_matrix = glm::transpose(normal_matrix);
         material_shader.set_mat3("normal_matrix", normal_matrix);
         draw_basic_mesh(plane_mesh, material_shader, plane_mat);
+
+        backpack.render();
 
         skybox_shader.use();
         view = glm::mat4(glm::mat3(active_camera.view_matrix()));
