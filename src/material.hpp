@@ -9,6 +9,8 @@
 #include "string"
 #include "unordered_map"
 
+#include "shader.hpp"
+
 const static std::string ASSETS_FOLDER = "assets/";
 static std::unordered_map<std::string, GLuint> global_loaded_textures;
 
@@ -91,30 +93,26 @@ void load_material(Material &material, std::string diffuse_name, std::string spe
     material.parallax_map = load_texture(parallax_name);
 }
 
-void set_shader_material(ShaderProgram &shader, Material &material) {
+void set_material_in_shader(Material &mat, ShaderProgram &shader) {
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, material.diffuse);
+    glBindTexture(GL_TEXTURE_2D, mat.diffuse);
     shader.set_int("material.diffuse", 0);
 
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, material.specular);
+    glBindTexture(GL_TEXTURE_2D, mat.specular);
     shader.set_int("material.specular", 1);
 
-    shader.set_float("material.shininess", material.shininess);
+    shader.set_float("material.shininess", mat.shininess);
 
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, material.normal_map);
+    glBindTexture(GL_TEXTURE_2D, mat.normal_map);
     shader.set_int("material.normal_map", 2);
 
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, material.parallax_map);
+    glBindTexture(GL_TEXTURE_2D, mat.parallax_map);
     shader.set_int("material.parallax_map", 3);
 
     glBindTexture(GL_TEXTURE_2D, 0);
 }
-
-struct PBRMaterial {
-    // TODO: PBR
-};
 
 #endif

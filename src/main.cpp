@@ -11,9 +11,10 @@
 
 #include "camera.hpp"
 #include "data.hpp"
+#include "game_object.hpp"
 #include "lighting.hpp"
 #include "material.hpp"
-#include "mesh.hpp"
+#include "model.hpp"
 #include "shader.hpp"
 
 #define WINDOW_WIDTH 1920
@@ -101,7 +102,7 @@ int main(void) {
     ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
     ShaderProgram material_shader("src/shaders/material_vs.glsl", "src/shaders/material_fs.glsl");
 
-    Mesh skybox_mesh;
+    BasicMesh skybox_mesh;
     load_skybox_mesh(skybox_mesh, sizeof(SKYBOX_VERTICES), &SKYBOX_VERTICES[0]);
     std::string cubemap_faces[] = {
         "skybox/right.jpg",
@@ -115,16 +116,16 @@ int main(void) {
 
     Material container_mat;
     load_material(container_mat, "container2.png", "container2_s.png", 128);
-    Mesh container_mesh;
-    load_mesh(container_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
+    BasicMesh container_mesh;
+    load_basic_mesh(container_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
 
-    Mesh wall_mesh;
-    load_mesh(wall_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
+    BasicMesh wall_mesh;
+    load_basic_mesh(wall_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
     Material wall_mat;
     load_material(wall_mat, "brickwall.jpg", "brickwall.jpg", 128, "brickwall_n.jpg");
 
-    Mesh plane_mesh;
-    load_mesh(plane_mesh, sizeof(PLANE_VERTICES), PLANE_VERTICES);
+    BasicMesh plane_mesh;
+    load_basic_mesh(plane_mesh, sizeof(PLANE_VERTICES), PLANE_VERTICES);
     Material plane_mat;
     load_material(plane_mat, "wood.png");
 
@@ -148,6 +149,10 @@ int main(void) {
         glm::vec3(1.2f, -3.0f, 1.0f),
     };
     load_point_lights(point_lights, plight_positions, point_light_count);
+
+    GameObject backpack = GameObject(material_shader, "backpack/backpack.obj");
+    backpack.move(glm::vec3(2.0f, -2.0f, 0.0f));
+    backpack.scale(glm::vec3(0.2f));
 
     float last_time = 0.0f;
 
@@ -188,8 +193,7 @@ int main(void) {
         normal_matrix = glm::transpose(normal_matrix);
         material_shader.set_mat3("normal_matrix", normal_matrix);
         material_shader.set_mat4("model", model);
-        set_shader_material(material_shader, container_mat);
-        draw_mesh(container_mesh, material_shader);
+        draw_basic_mesh(container_mesh, material_shader, container_mat);
 
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(2.0f, 2.0f, 2.0f));
@@ -198,8 +202,12 @@ int main(void) {
         normal_matrix = glm::inverse(normal_matrix);
         normal_matrix = glm::transpose(normal_matrix);
         material_shader.set_mat3("normal_matrix", normal_matrix);
-        set_shader_material(material_shader, wall_mat);
-        draw_mesh(wall_mesh, material_shader);
+        draw_basic_mesh(wall_mesh, material_shader, wall_mat);
+
+        backpack.move(glm::vec3(sin(glfwGetTime()) * 2 * delta_time, 0.0f, 0.0f));
+        backpack.rotate(glm::vec3(0.0f, 1.0f, 0.0f), 15.0f * delta_time);
+        backpack.scale(glm::vec3(1.0f + 0.1f * delta_time));
+        backpack.render();
 
         model = glm::mat4(1.0f);
         model = glm::translate(model, glm::vec3(0.0f, -2.0f, 0.0f));
@@ -208,8 +216,7 @@ int main(void) {
         normal_matrix = glm::inverse(normal_matrix);
         normal_matrix = glm::transpose(normal_matrix);
         material_shader.set_mat3("normal_matrix", normal_matrix);
-        set_shader_material(material_shader, plane_mat);
-        draw_mesh(plane_mesh, material_shader);
+        draw_basic_mesh(plane_mesh, material_shader, plane_mat);
 
         skybox_shader.use();
         view = glm::mat4(glm::mat3(active_camera.view_matrix()));

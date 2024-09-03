@@ -27,14 +27,14 @@ struct PointLight {
 };
 
 void load_point_lights(PointLight *plights, glm::vec3 *positions, int32_t point_light_count) {
-    assert(point_light_count < MAX_POINT_LIGHT_COUNT);
+    assert(point_light_count <= MAX_POINT_LIGHT_COUNT);
     for (int32_t i = 0; i < point_light_count; i++) {
         plights[i].position = positions[i];
     }
 }
 
 void set_shader_lighting_data(ShaderProgram &shader, DirectionalLight dir_light, PointLight *point_lights, int32_t point_light_count) {
-    assert(point_light_count < MAX_POINT_LIGHT_COUNT);
+    assert(point_light_count <= MAX_POINT_LIGHT_COUNT);
     shader.set_vec3("dir_light.ambient", dir_light.ambient);
     shader.set_vec3("dir_light.diffuse", dir_light.diffuse);
     shader.set_vec3("dir_light.specular", dir_light.specular);
