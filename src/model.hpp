@@ -142,13 +142,13 @@ void load_assimp_material(Material &material, aiMaterial *assimp_mat, std::strin
     aiColor3D color(0.0f, 0.0f, 0.0f);
 
     assimp_mat->Get(AI_MATKEY_COLOR_AMBIENT, color);
-    glm::vec3 ambient_color = glm::vec3(color.r, color.b, color.g);
+    glm::vec3 ambient_color = glm::vec3(color.r, color.g, color.b);
 
     assimp_mat->Get(AI_MATKEY_COLOR_DIFFUSE, color);
-    glm::vec3 diffuse_color = glm::vec3(color.r, color.b, color.g);
+    glm::vec3 diffuse_color = glm::vec3(color.r, color.g, color.b);
 
     assimp_mat->Get(AI_MATKEY_COLOR_SPECULAR, color);
-    glm::vec3 specular_color = glm::vec3(color.r, color.b, color.g);
+    glm::vec3 specular_color = glm::vec3(color.r, color.g, color.b);
 
     float shininess = 1.0f;
     assimp_mat->Get(AI_MATKEY_SHININESS, shininess);
@@ -216,7 +216,7 @@ void load_model(Model &model, std::string path) {
     model.directory = path.substr(0, path.find_last_of('/'));
     path = ASSETS_FOLDER + path;
     Assimp::Importer importer;
-    const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals | aiProcess_JoinIdenticalVertices);
+    const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices);
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
         std::cout << "ERROR with assimp:: " << importer.GetErrorString() << std::endl;
         return;

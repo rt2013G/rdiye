@@ -9,6 +9,8 @@
 #include "string"
 #include "unordered_map"
 
+#include "defines.h"
+
 #include "shader.hpp"
 
 #define ASSETS_FOLDER "assets/"
@@ -23,7 +25,7 @@ GLuint load_texture(std::string filename) {
     }
     GLuint tex_id;
     glGenTextures(1, &tex_id);
-    int tex_width, tex_height, num_channels;
+    i32 tex_width, tex_height, num_channels;
     stbi_set_flip_vertically_on_load(true);
     std::string path = ASSETS_FOLDER + filename;
     unsigned char *data = stbi_load(path.c_str(), &tex_width, &tex_height, &num_channels, 0);
@@ -57,13 +59,13 @@ GLuint load_texture(std::string filename) {
     return tex_id;
 }
 
-GLuint load_cubemap(std::string *face_names, unsigned int face_len) {
+GLuint load_cubemap(std::string *face_names, u32 face_len) {
     GLuint tex_id;
     glGenTextures(1, &tex_id);
     glBindTexture(GL_TEXTURE_CUBE_MAP, tex_id);
     int tex_width, tex_height, num_channels;
     unsigned char *data;
-    for (unsigned int i = 0; i < face_len; i++) {
+    for (u32 i = 0; i < face_len; i++) {
         std::string path = ASSETS_FOLDER + face_names[i];
         data = stbi_load(path.c_str(), &tex_width, &tex_height, &num_channels, 0);
         glTexImage2D(

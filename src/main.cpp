@@ -7,6 +7,8 @@
 #include "lib/glm/gtc/type_ptr.hpp"
 #include "lib/stb/stb_image.h"
 
+#include "defines.h"
+
 #include "iostream"
 
 #include "camera.hpp"
@@ -101,6 +103,7 @@ int main(void) {
     ShaderProgram lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
     ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
     ShaderProgram material_shader("src/shaders/material_vs.glsl", "src/shaders/material_fs.glsl");
+    ShaderProgram shadow_shader("src/shaders/shadow_map_vs.glsl", "src/shaders/shadow_map_fs.glsl");
 
     BasicMesh skybox_mesh;
     load_skybox_mesh(skybox_mesh, sizeof(SKYBOX_VERTICES), &SKYBOX_VERTICES[0]);
@@ -141,7 +144,7 @@ int main(void) {
     DirectionalLight dir_light;
     dir_light.direction = glm::vec3(-0.2f, -1.0f, -0.3f);
 
-    int32_t point_light_count = 3;
+    u8 point_light_count = 3;
     PointLight point_lights[MAX_POINT_LIGHT_COUNT];
     glm::vec3 plight_positions[3] = {
         glm::vec3(1.2f, 1.0f, 2.0f),
@@ -171,7 +174,7 @@ int main(void) {
         glm::mat4 projection_mul_view = projection * view;
 
         lighting_shader.use();
-        for (int32_t i = 0; i < point_light_count; i++) {
+        for (u8 i = 0; i < point_light_count; i++) {
             glm::mat4 transform = glm::mat4(1.0f);
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, plight_positions[i]);
