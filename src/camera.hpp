@@ -3,6 +3,15 @@
 
 #include "rdiye_lib.h"
 
+// TODO: remove this later
+enum CameraDirection 
+{
+    FORWARD = 0,
+    BACKWARD = 1,
+    LEFT = 2,
+    RIGHT = 3,
+};
+
 struct game_camera_settings
 {
     f32 alpha;

@@ -68,16 +68,6 @@ static_assert(sizeof(b32) == 4, "b32 size error");
 
 #define DegreesToRadians(angle) ((angle) * PI32 / 180)
 
-
-// TODO: remove this later
-enum CameraDirection 
-{
-    FORWARD = 0,
-    BACKWARD = 1,
-    LEFT = 2,
-    RIGHT = 3,
-};
-
 inline f32 Square(f32 a)
 {
     f32 result = a * a;
@@ -655,6 +645,15 @@ glm::vec3 Vec3ToGlm(vec3 src)
 vec3 GlmToVec3(glm::vec3 vec)
 {
     vec3 result = Vec3(vec.x, vec.y, vec.z);
+
+    return(result);
+}
+glm::mat4 Mat4ToGlm(mat4x4 src)
+{
+    glm::mat4 result = glm::mat4(src.e[0][0], src.e[1][0], src.e[2][0], src.e[3][0],
+                                src.e[0][1], src.e[1][1], src.e[2][1], src.e[3][1],
+                                src.e[0][2], src.e[1][2], src.e[2][2], src.e[3][2],
+                                src.e[0][3], src.e[1][3], src.e[2][3], src.e[3][3]);
 
     return(result);
 }

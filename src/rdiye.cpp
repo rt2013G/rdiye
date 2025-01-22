@@ -96,7 +96,7 @@ void ScrollCallback(GLFWwindow *window, f64 offset_x, f64 offset_y)
     ProcessCameraScroll(&state.player_camera, (f32)offset_y);
 }
 
-int main(void)
+void GameInit()
 {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -107,13 +107,13 @@ int main(void)
     if (window == NULL)
     {
         // TODO
-        return(false);
+        return;
     }
     glfwMakeContextCurrent(window);
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         // TODO
-        return(false);
+        return;
     }
     glViewport(0, 0, window_width, window_height);
 
@@ -137,7 +137,11 @@ int main(void)
     #endif
 
     mouse_last_movement = Vec2(state.window_width / 2.0f, state.window_height / 2.0f);
-    
+}
+
+#if 0
+void GameRun(void)
+{
     ShaderProgram lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
     ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
     ShaderProgram material_shader("src/shaders/material_vs.glsl", "src/shaders/material_fs.glsl");
@@ -274,5 +278,76 @@ int main(void)
     }
 
     glfwTerminate();
+}
+#else
+void GameRun()
+{
+    GLuint cube_vao, cube_vbo;
+    glGenVertexArrays(1, &cube_vao);
+    glGenBuffers(1, &cube_vbo);
+    glBindVertexArray(cube_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, cube_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(CUBE_VERTICES_TEXTURED), &CUBE_VERTICES_TEXTURED[0], GL_STATIC_DRAW);
+    GLsizei cube_triangles_count = sizeof(CUBE_VERTICES_TEXTURED) / sizeof(f32) * 8; 
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(3 * sizeof(f32)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(6 * sizeof(f32)));
+    glBindVertexArray(0);
+
+    ShaderProgram gooch_shader = ShaderProgram("src/shaders/rtr/vs.glsl", "src/shaders/rtr/gooch_shading.fs.glsl");
+
+    vec3 light_direction = Vec3(0.0f, 0.5f, -0.5f);
+    vec3 surface_color = Vec3(1.0f, 0.1f, 0.1f);
+
+    while(state.is_running)
+    {
+        f32 current_time = glfwGetTime();
+        state.delta_time = current_time - state.last_time;
+        state.last_time = current_time;
+
+        ProcessInput(state.window);
+
+        glClearColor(0.7, 0.7, 0.7, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glm::mat4 projection = PerspectiveProjection(&state.player_camera, state.window_width, state.window_height);
+        glm::mat4 view = CameraViewMatrix(&state.player_camera);
+
+        mat4x4 cube_position = Identity();
+        mat4x4 T = Translation(1.0f, 1.0f, -4.0f);
+        mat4x4 S = Scaling(0.5f, 0.5f, 0.5f);
+        mat4x4 transform = T * S * cube_position;
+
+        mat4x4 light_rotation = RotationX(DegreesToRadians(5)) * 
+                                RotationY(DegreesToRadians(3)) * 
+                                RotationZ(DegreesToRadians(2));
+
+        light_direction = light_rotation * light_direction;
+
+        gooch_shader.use();
+        gooch_shader.set_mat4("transform", Mat4ToGlm(transform));
+        gooch_shader.set_mat4("view", view);
+        gooch_shader.set_mat4("projection", projection);
+        gooch_shader.set_vec3("surface_color", Vec3ToGlm(surface_color));
+        gooch_shader.set_vec3("light_direction", Vec3ToGlm(light_direction));
+        gooch_shader.set_vec3("view_vector", state.player_camera.front);
+
+        glBindVertexArray(cube_vao);
+        glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
+        glBindVertexArray(0);
+
+        glfwSwapBuffers(state.window);
+        glfwPollEvents(); 
+    }
+}
+#endif
+
+int main(void)
+{
+    GameInit();
+    GameRun();
     return(0);
 }
