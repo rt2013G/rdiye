@@ -8,8 +8,8 @@
 #include "lib/stb/stb_image.h"
 
 #include "rdiye_lib.h"
+#include "camera.h"
 
-#include "camera.hpp"
 #include "data.hpp"
 #include "game_object.hpp"
 #include "lighting.hpp"
@@ -130,11 +130,7 @@ void GameInit()
     state.last_time = 0.0f;
     state.delta_time = 0.0f;
     state.window = window;
-    #if 0
     state.player_camera = DefaultCamera();
-    #else
-    state.player_camera = game_camera();
-    #endif
 
     mouse_last_movement = Vec2(state.window_width / 2.0f, state.window_height / 2.0f);
 }
@@ -325,7 +321,7 @@ void GameRun()
                                 RotationY(DegreesToRadians(3)) * 
                                 RotationZ(DegreesToRadians(2));
 
-        light_direction = light_rotation * light_direction;
+        light_direction = Normalize(light_rotation * light_direction);
 
         gooch_shader.use();
         gooch_shader.set_mat4("transform", Mat4ToGlm(transform));
@@ -333,7 +329,7 @@ void GameRun()
         gooch_shader.set_mat4("projection", projection);
         gooch_shader.set_vec3("surface_color", Vec3ToGlm(surface_color));
         gooch_shader.set_vec3("light_direction", Vec3ToGlm(light_direction));
-        gooch_shader.set_vec3("view_vector", state.player_camera.front);
+        gooch_shader.set_vec3("view_vector", Vec3ToGlm(state.player_camera.front));
 
         glBindVertexArray(cube_vao);
         glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);

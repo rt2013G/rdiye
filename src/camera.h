@@ -1,5 +1,5 @@
-#ifndef CAMERA_HPP
-#define CAMERA_HPP
+#ifndef CAMERA_H
+#define CAMERA_H
 
 #include "rdiye_lib.h"
 
@@ -39,8 +39,6 @@ game_camera_settings DefaultCameraSettings()
     return(result);
 }
 
-#if 0
-
 struct game_camera
 {
     vec3 position;
@@ -51,6 +49,19 @@ struct game_camera
     game_camera_settings settings;
 };
 
+game_camera DefaultCamera()
+{
+    game_camera result = {};
+    result.settings = DefaultCameraSettings();
+    result.position = Vec3(0.0f, 0.0f, 0.0f);
+    result.front = Vec3(0.0f, 0.0f, -1.0f);
+    result.up = Vec3(0.0f, 1.0f, 0.0f);
+    result.world_up = result.up;
+    result.right = Vec3(1.0f, 0.0f, 0.0f);
+
+    return(result);
+}
+
 void UpdateCameraVectors(game_camera *camera)
 {
     vec3 new_front = Vec3(
@@ -60,61 +71,19 @@ void UpdateCameraVectors(game_camera *camera)
     );
     camera->front = Normalize(new_front);
     camera->right = Normalize(Cross(camera->front, camera->world_up));
-    camera->up = Normalize(Cross(camera->right, camera->front));
-}
 
-game_camera DefaultCamera()
-{
-    game_camera result = {};
-    result.position = Vec3(0.0f, 0.0f, 0.0f);
-    result.front = Vec3(0.0f, 0.0f, -1.0f);
-    result.up = Vec3(0.0f, 1.0f, 0.0f);
-    result.world_up = result.up;
-    result.right = Vec3(1.0f, 0.0f, 0.0f);
-    result.settings = DefaultCameraSettings();
-
-    return(result);
+    // NOTE, TODO: i assume that because of the right-handedness this needs to be negated
+    //             otherwise the vector obtained by the cross product would actually point down
+    //             maybe check this assumption in the future
+    camera->up = - Normalize(Cross(camera->right, camera->front));
 }
-#else
-struct game_camera {
-    glm::vec3 position;
-    glm::vec3 front;
-    glm::vec3 up;
-    glm::vec3 right;
-    glm::vec3 world_up;
-    game_camera_settings settings;
-    game_camera(glm::vec3 position, game_camera_settings settings);
-    game_camera(glm::vec3 position);
-    game_camera(game_camera_settings settings);
-    game_camera();
-};
-
-game_camera::game_camera() {
-    this->front = glm::vec3(0.0f, 0.0f, -1.0f);
-    this->settings = DefaultCameraSettings();
-    this->position = glm::vec3(0.0f, 0.0f, 0.0f);
-    this->up = glm::vec3(0.0f, 1.0f, 0.0f);
-    this->world_up = glm::vec3(0.0f, 1.0f, 0.0f);
-    this->right = glm::vec3(1.0f, 0.0f, 0.0f);
-}
-
-void UpdateCameraVectors(game_camera *camera) {
-    glm::vec3 tmp;
-    tmp.x = cos(glm::radians(camera->settings.alpha)) * cos(glm::radians(camera->settings.beta));
-    tmp.y = sin(glm::radians(camera->settings.beta));
-    tmp.z = sin(glm::radians(camera->settings.alpha)) * cos(glm::radians(camera->settings.beta));
-    camera->front = glm::normalize(tmp);
-    camera->right = glm::normalize(glm::cross(camera->front, camera->world_up));
-    camera->up = glm::normalize(glm::cross(camera->right, camera->front));
-}
-#endif
 
 glm::mat4 CameraViewMatrix(game_camera *camera)
 {
     glm::mat4 result = glm::lookAt(
-        camera->position,
-        camera->position + camera->front,
-        camera->up
+        Vec3ToGlm(camera->position),
+        Vec3ToGlm(camera->position + camera->front),
+        Vec3ToGlm(camera->up)
     );
     return(result);
 }
