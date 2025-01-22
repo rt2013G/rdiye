@@ -8,14 +8,14 @@ out vec3 fragment_position;
 out vec3 normal;
 out vec2 tex_coords;
 
-uniform mat4 transform;
-uniform mat4 view;
-uniform mat4 projection;
+uniform mat4 model;
+uniform mat4 projection_mul_view;
 
 void main()
 {
-    normal = in_normal;
+    vec4 world_position = model * vec4(in_pos, 1.0f);
+    fragment_position = world_position.xyz;
+    normal = (model * vec4(in_normal, 1.0f)).xyz;
     tex_coords = in_tex_coords;
-    fragment_position = vec3(transform * vec4(in_pos, 1.0f));
-    gl_Position = projection * view * transform * vec4(in_pos, 1.0f);
+    gl_Position = projection_mul_view * world_position;
 }

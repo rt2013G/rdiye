@@ -52,11 +52,7 @@ void MouseCallback(GLFWwindow *window, f64 pos_x, f64 pos_y)
     vec2 offset = Vec2(p.x - mouse_last_movement.x, 
                        mouse_last_movement.y - p.y);
     mouse_last_movement = p;
-    #if 1
-        ProcessCameraMouse(&state.player_camera, offset);
-    #else
-        ProcessCameraMouse(&state.player_camera, offset.x, offset.y);
-    #endif
+    ProcessCameraMouse(&state.player_camera, offset);
 }
 
 void ProcessInput(GLFWwindow *window)
@@ -171,15 +167,6 @@ void GameRun(void)
     Material plane_mat;
     load_material(plane_mat, "wood.png");
 
-    GLuint light_cube_VAO, light_cube_VBO;
-    glGenVertexArrays(1, &light_cube_VAO);
-    glGenBuffers(1, &light_cube_VBO);
-    glBindVertexArray(light_cube_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, light_cube_VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32), (void *)0);
-
     DirectionalLight dir_light;
     dir_light.direction = glm::vec3(-0.2f, -1.0f, -0.3f);
 
@@ -284,7 +271,7 @@ void GameRun()
     glBindVertexArray(cube_vao);
     glBindBuffer(GL_ARRAY_BUFFER, cube_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(CUBE_VERTICES_TEXTURED), &CUBE_VERTICES_TEXTURED[0], GL_STATIC_DRAW);
-    GLsizei cube_triangles_count = sizeof(CUBE_VERTICES_TEXTURED) / sizeof(f32) * 8; 
+    GLsizei cube_triangles_count = sizeof(CUBE_VERTICES_TEXTURED) / (sizeof(f32) * 8); 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)0);
     glEnableVertexAttribArray(1);
@@ -292,12 +279,33 @@ void GameRun()
     glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(6 * sizeof(f32)));
     glBindVertexArray(0);
+    
+    GLuint light_vao, light_vbo;
+    glGenVertexArrays(1, &light_vao);
+    glGenBuffers(1, &light_vbo);
+    glBindVertexArray(light_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, light_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
+    GLsizei light_triangles_count = sizeof(LIGHT_CUBE_VERTICES) / (sizeof(f32) * 3);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32), (void *)0);
+    glBindVertexArray(0);
 
-    ShaderProgram gooch_shader = ShaderProgram("src/shaders/rtr/vs.glsl", "src/shaders/rtr/gooch_shading.fs.glsl");
+    #define MAX_LIGHTS 16
+    vec3 light_positions[MAX_LIGHTS] = {};
+    light_positions[0] = Vec3(2.0f, 2.0f, -1.5f);
+    light_positions[1] = Vec3(2.5f, 1.5f, -2.5f);
+    i32 point_light_count = 2;
 
-    vec3 light_direction = Vec3(0.0f, 0.5f, -0.5f);
-    vec3 surface_color = Vec3(1.0f, 0.1f, 0.1f);
+    vec3 surface_color = Vec3(0.5f, 0.1f, 0.1f);
+    vec3 cool_color = Vec3(0, 0, 0.55f) + (0.25f * surface_color);
+    vec3 ambient_color = cool_color / 2;
+    vec3 warm_color = Vec3(0.7f, 0.5f, 0.5f);
+    vec3 light_color = Vec3(1.0f, 1.0f, 1.0f);
 
+    ShaderProgram object_shader = ShaderProgram("src/shaders/rtr/vs.glsl", "src/shaders/rtr/fs.glsl");
+    ShaderProgram light_shader = ShaderProgram("src/shaders/rtr/lighting.vs.glsl", "src/shaders/rtr/lighting.fs.glsl");
+    
     while(state.is_running)
     {
         f32 current_time = glfwGetTime();
@@ -306,33 +314,43 @@ void GameRun()
 
         ProcessInput(state.window);
 
-        glClearColor(0.7, 0.7, 0.7, 1.0);
+        glClearColor(0.2, 0.2, 0.2, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 projection = PerspectiveProjection(&state.player_camera, state.window_width, state.window_height);
+        glm::mat4 projection = Mat4ToGlm(PerspectiveProjection(&state.player_camera, state.window_width, state.window_height));
         glm::mat4 view = CameraViewMatrix(&state.player_camera);
+        glm::mat4 projection_mul_view = projection * view;
 
-        mat4x4 cube_position = Identity();
-        mat4x4 T = Translation(1.0f, 1.0f, -4.0f);
-        mat4x4 S = Scaling(0.5f, 0.5f, 0.5f);
-        mat4x4 transform = T * S * cube_position;
+        vec3 cube_position = Vec3(1.0f, 0.0f, -3.0f);
+        mat4x4 model = Translation(cube_position) * Scaling(0.5f);
 
-        mat4x4 light_rotation = RotationX(DegreesToRadians(5)) * 
-                                RotationY(DegreesToRadians(3)) * 
-                                RotationZ(DegreesToRadians(2));
-
-        light_direction = Normalize(light_rotation * light_direction);
-
-        gooch_shader.use();
-        gooch_shader.set_mat4("transform", Mat4ToGlm(transform));
-        gooch_shader.set_mat4("view", view);
-        gooch_shader.set_mat4("projection", projection);
-        gooch_shader.set_vec3("surface_color", Vec3ToGlm(surface_color));
-        gooch_shader.set_vec3("light_direction", Vec3ToGlm(light_direction));
-        gooch_shader.set_vec3("view_vector", Vec3ToGlm(state.player_camera.front));
-
+        object_shader.use();
+        object_shader.set_mat4("model", Mat4ToGlm(model));
+        object_shader.set_mat4("projection_mul_view", projection_mul_view);
+        object_shader.set_vec3("viewer_position", Vec3ToGlm(state.player_camera.position));
+        object_shader.set_vec3("ambient_color", Vec3ToGlm(ambient_color));
+        object_shader.set_vec3("surface_color", Vec3ToGlm(surface_color));
+        object_shader.set_vec3("warm_color", Vec3ToGlm(warm_color));
+        object_shader.set_vec3("lights[0].position", Vec3ToGlm(light_positions[0]));
+        object_shader.set_vec3("lights[1].position", Vec3ToGlm(light_positions[1]));
+        object_shader.set_vec3("lights[0].color", Vec3ToGlm(light_color));
+        object_shader.set_vec3("lights[1].color", Vec3ToGlm(light_color));
+        object_shader.set_int("light_count", point_light_count);
         glBindVertexArray(cube_vao);
         glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
+        glBindVertexArray(0);
+
+        model = Translation(light_positions[0]) * Scaling(0.05f);
+        light_shader.use();
+        light_shader.set_mat4("model", Mat4ToGlm(model));
+        light_shader.set_mat4("projection_mul_view", projection_mul_view);
+        glBindVertexArray(light_vao);
+        glDrawArrays(GL_TRIANGLES, 0, light_triangles_count);
+
+        model = Translation(light_positions[1]) * Scaling(0.1f);
+        light_shader.set_mat4("model", Mat4ToGlm(model));
+        glBindVertexArray(light_vao);
+        glDrawArrays(GL_TRIANGLES, 0, light_triangles_count);
         glBindVertexArray(0);
 
         glfwSwapBuffers(state.window);

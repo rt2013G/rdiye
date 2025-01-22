@@ -89,6 +89,13 @@ inline f32 Sine(f32 theta)
     return(result);
 }
 
+inline f32 Tangent(f32 theta)
+{
+    f32 result = tanf(theta);
+
+    return(result);
+}
+
 union vec2
 {
     struct
@@ -590,6 +597,13 @@ mat4x4 Scaling(f32 x, f32 y, f32 z)
     return(result); 
 }
 
+mat4x4 Scaling(f32 value)
+{
+    mat4x4 result = Scaling(value, value, value);
+
+    return(result);
+}
+
 mat4x4 Shear(i32 i, i32 j, f32 s)
 {
     Assert(i < 4);
@@ -633,6 +647,18 @@ mat4x4 Orthographic(rect3 rect)
     return(result);
 }
 
+mat4x4 Perspective(f32 FOV, f32 aspect_ratio, f32 near_plane, f32 far_plane)
+{
+    f32 c = 1.0f / (Tangent(DegreesToRadians(FOV / 2)));
+    mat4x4 result = {{
+        {c / aspect_ratio, 0, 0, 0},
+        {0, c, 0, 0},
+        {0, 0, -((far_plane + near_plane) / (far_plane - near_plane)), -((2 * far_plane * near_plane) / (far_plane - near_plane))},
+        {0, 0, -1, 0},
+    }};
+
+    return(result);
+}
 
 // TODO: remove this later
 #include "lib/glm/glm.hpp"

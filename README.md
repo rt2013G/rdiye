@@ -1,4 +1,4 @@
-### My OpenGL
+### rdiye 
 A work in progress 3D game engine built while learning game development and graphics programming in OpenGL.
 
 ### Resources used
