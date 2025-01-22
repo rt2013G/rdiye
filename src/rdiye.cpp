@@ -1,8 +1,5 @@
-#ifndef GAME_ENTRY_HPP
-#define GAME_ENTRY_HPP
-
 #include "glad/glad.h"
-
+// NOTE: include glad before glfw
 #include "GLFW/glfw3.h"
 
 #include "lib/glm/glm.hpp"
@@ -10,9 +7,7 @@
 #include "lib/glm/gtc/type_ptr.hpp"
 #include "lib/stb/stb_image.h"
 
-#include "iostream"
-
-#include "defines.h"
+#include "rdiye_lib.h"
 
 #include "camera.hpp"
 #include "data.hpp"
@@ -22,83 +17,127 @@
 #include "model.hpp"
 #include "shader.hpp"
 
-struct GameConfig {
-    u16 window_width;
-    u16 window_height;
-    char *window_name;
-};
-
-struct GameState {
+struct game_state
+{
     GLFWwindow *window;
     u16 window_width;
     u16 window_height;
-    real64 last_time;
-    real32 delta_time;
-    bool is_running;
-    Camera player_camera;
+    f64 last_time;
+    f32 delta_time;
+    b32 is_running;
+    game_camera player_camera;
 };
-// TODO: maybe add game/engine settings here
 
-static GameState GState;
-static bool is_initialized = false;
+GLOBAL u16 window_width = 1920;
+GLOBAL u16 window_height = 1080;
+GLOBAL game_state state;
+GLOBAL bool has_mouse_moved = false;
+GLOBAL vec2 mouse_last_movement;
 
-static bool global_first_mouse = true;
-static real32 global_lastX;
-static real32 global_lastY;
+void ResizeCallback(GLFWwindow *window, i32 width, i32 height)
+{
+    glViewport(0, 0, width, height);
+    state.window_width = width;
+    state.window_height = height;
+}
 
-void framebuffer_size_callback(GLFWwindow *window, i32 width, i32 height);
-void process_input(GLFWwindow *window);
-void mouse_callback(GLFWwindow *window, real64 in_pos_x, real64 in_pos_y);
-void scroll_callback(GLFWwindow *window, real64 offsetX, real64 offsetY);
-void game_shutdown();
-
-bool game_init(GameConfig *cfg) {
-    if (is_initialized) {
-        std::cout << "error. application already created" << std::endl;
-        return false;
+void MouseCallback(GLFWwindow *window, f64 pos_x, f64 pos_y)
+{
+    vec2 p = Vec2((f32)pos_x, (f32)pos_y);
+    if (!has_mouse_moved)
+    {
+        mouse_last_movement = p;
+        has_mouse_moved = true;
     }
+    vec2 offset = Vec2(p.x - mouse_last_movement.x, 
+                       mouse_last_movement.y - p.y);
+    mouse_last_movement = p;
+    #if 1
+        ProcessCameraMouse(&state.player_camera, offset);
+    #else
+        ProcessCameraMouse(&state.player_camera, offset.x, offset.y);
+    #endif
+}
 
-    if (!glfwInit()) {
-        std::cout << "failed to initialize glfw" << std::endl;
-        return false;
+void ProcessInput(GLFWwindow *window)
+{
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    {
+        state.is_running = false;
     }
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+    {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS)
+    {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    }
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    {
+        MoveCamera(&state.player_camera, FORWARD, state.delta_time);
+    }
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    {
+        MoveCamera(&state.player_camera, BACKWARD, state.delta_time);
+    }
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    {
+        MoveCamera(&state.player_camera, LEFT, state.delta_time);
+    }
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    {
+        MoveCamera(&state.player_camera, RIGHT, state.delta_time);
+    }
+}
+
+void ScrollCallback(GLFWwindow *window, f64 offset_x, f64 offset_y)
+{
+    ProcessCameraScroll(&state.player_camera, (f32)offset_y);
+}
+
+int main(void)
+{
+    glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    GLFWwindow *window = glfwCreateWindow(cfg->window_width, cfg->window_height, cfg->window_name, NULL, NULL);
-    if (window == NULL) {
-        std::cout << "failed to create window";
-        return false;
+
+    GLFWwindow *window = glfwCreateWindow(window_width, window_height, "hello!", NULL, NULL);
+    if (window == NULL)
+    {
+        // TODO
+        return(false);
     }
     glfwMakeContextCurrent(window);
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cout << "failed to initialize glad" << std::endl;
-        return false;
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    {
+        // TODO
+        return(false);
     }
-    glViewport(0, 0, cfg->window_width, cfg->window_height);
+    glViewport(0, 0, window_width, window_height);
+
     glfwSwapInterval(1);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetFramebufferSizeCallback(window, ResizeCallback);
+    glfwSetCursorPosCallback(window, MouseCallback);
+    glfwSetScrollCallback(window, ScrollCallback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
     glEnable(GL_DEPTH_TEST);
 
-    GState.is_running = true;
-    GState.window_width = cfg->window_width;
-    GState.window_height = cfg->window_height;
-    GState.last_time = 0.0f;
-    GState.delta_time = 0.0f;
-    GState.window = window;
-    GState.player_camera = Camera();
+    state.is_running = true;
+    state.window_width = window_width;
+    state.window_height = window_height;
+    state.last_time = 0.0f;
+    state.delta_time = 0.0f;
+    state.window = window;
+    #if 0
+    state.player_camera = DefaultCamera();
+    #else
+    state.player_camera = game_camera();
+    #endif
 
-    global_lastX = GState.window_width / 2.0f;
-    global_lastY = GState.window_height / 2.0f;
-
-    is_initialized = true;
-    return true;
-}
-
-void game_run() {
+    mouse_last_movement = Vec2(state.window_width / 2.0f, state.window_height / 2.0f);
+    
     ShaderProgram lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
     ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
     ShaderProgram material_shader("src/shaders/material_vs.glsl", "src/shaders/material_fs.glsl");
@@ -106,7 +145,8 @@ void game_run() {
 
     BasicMesh skybox_mesh;
     load_skybox_mesh(skybox_mesh, sizeof(SKYBOX_VERTICES), &SKYBOX_VERTICES[0]);
-    std::string cubemap_faces[] = {
+    std::string cubemap_faces[] =
+    {
         "skybox/right.jpg",
         "skybox/left.jpg",
         "skybox/top.jpg",
@@ -138,14 +178,15 @@ void game_run() {
     glBindBuffer(GL_ARRAY_BUFFER, light_cube_VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(real32), (void *)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32), (void *)0);
 
     DirectionalLight dir_light;
     dir_light.direction = glm::vec3(-0.2f, -1.0f, -0.3f);
 
     u8 point_light_count = 3;
     PointLight point_lights[MAX_POINT_LIGHT_COUNT];
-    glm::vec3 plight_positions[3] = {
+    glm::vec3 plight_positions[3] =
+    {
         glm::vec3(1.2f, 1.0f, 2.0f),
         glm::vec3(1.2f, 3.0f, 1.0f),
         glm::vec3(1.2f, -3.0f, 1.0f),
@@ -155,23 +196,30 @@ void game_run() {
     GameObject backpack = GameObject(material_shader, "backpack/backpack.obj");
     backpack.move(glm::vec3(2.0f, -2.0f, -4.0f));
     backpack.scale(glm::vec3(0.25f, 0.25f, 0.25f));
-    while (GState.is_running) {
-        real32 current_time = glfwGetTime();
-        GState.delta_time = current_time - GState.last_time;
-        GState.last_time = current_time;
+    while (state.is_running)
+    {
+        f32 current_time = glfwGetTime();
+        // TODO: delta should be f64
+        state.delta_time = current_time - state.last_time;
+        state.last_time = current_time;
 
-        process_input(GState.window);
+        ProcessInput(state.window);
 
         glClearColor(0, 0, 0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 projection = GState.player_camera.perspective_projection(GState.window_width, GState.window_height);
-        glm::mat4 view = GState.player_camera.view_matrix();
+        glm::mat4 projection = PerspectiveProjection(&state.player_camera, state.window_width, state.window_height);
+        glm::mat4 view = CameraViewMatrix(&state.player_camera);
         glm::mat4 projection_mul_view = projection * view;
-        glm::vec3 player_position = GState.player_camera.position;
+        #if 0
+        glm::vec3 player_position = Vec3ToGlm(state.player_camera.position);
+        #else
+        glm::vec3 player_position = state.player_camera.position; 
+        #endif
 
         lighting_shader.use();
-        for (u8 i = 0; i < point_light_count; i++) {
+        for (u8 i = 0; i < point_light_count; i++)
+        {
             glm::mat4 transform = glm::mat4(1.0f);
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, plight_positions[i]);
@@ -216,71 +264,15 @@ void game_run() {
         backpack.render();
 
         skybox_shader.use();
-        view = glm::mat4(glm::mat3(GState.player_camera.view_matrix()));
+        view = glm::mat4(glm::mat3(CameraViewMatrix(&state.player_camera)));
         projection_mul_view = projection * view;
         skybox_shader.set_mat4("projection_mul_view", projection_mul_view);
         draw_skybox(skybox_mesh, skybox_shader, skybox_texture);
 
-        glfwSwapBuffers(GState.window);
+        glfwSwapBuffers(state.window);
         glfwPollEvents();
     }
 
-    GState.is_running = false;
-    game_shutdown();
-}
-
-void game_shutdown() {
     glfwTerminate();
+    return(0);
 }
-
-// CALLBACKS
-void framebuffer_size_callback(GLFWwindow *window, i32 width, i32 height) {
-    glViewport(0, 0, width, height);
-    GState.window_width = width;
-    GState.window_height = height;
-}
-
-void process_input(GLFWwindow *window) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        GState.is_running = false;
-    }
-    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    }
-    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-        GState.player_camera.move(Camera::FORWARD, GState.delta_time);
-    }
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-        GState.player_camera.move(Camera::BACKWARD, GState.delta_time);
-    }
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-        GState.player_camera.move(Camera::LEFT, GState.delta_time);
-    }
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-        GState.player_camera.move(Camera::RIGHT, GState.delta_time);
-    }
-}
-
-void mouse_callback(GLFWwindow *window, real64 in_pos_x, real64 in_pos_y) {
-    real32 posX = (real32)in_pos_x;
-    real32 posY = (real32)in_pos_y;
-    if (global_first_mouse) {
-        global_lastX = posX;
-        global_lastY = posY;
-        global_first_mouse = false;
-    }
-    real32 offsetX = posX - global_lastX;
-    real32 offsetY = global_lastY - posY;
-    global_lastX = posX;
-    global_lastY = posY;
-    GState.player_camera.process_mouse(offsetX, offsetY);
-}
-
-void scroll_callback(GLFWwindow *window, real64 offsetX, real64 offsetY) {
-    GState.player_camera.process_scroll((real32)offsetY);
-}
-
-#endif

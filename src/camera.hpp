@@ -1,152 +1,167 @@
 #ifndef CAMERA_HPP
 #define CAMERA_HPP
 
-#include "glad/glad.h"
+#include "rdiye_lib.h"
 
-#include "lib/glm/glm.hpp"
-#include "lib/glm/gtc/matrix_transform.hpp"
-
-#include "defines.h"
-
-struct CameraSettings {
-    real32 alpha;
-    real32 beta;
-    real32 mov_speed;
-    real32 sens_x, sens_y, sens_scroll;
-    real32 FOV;
-    real32 near_plane, far_plane;
+struct game_camera_settings
+{
+    f32 alpha;
+    f32 beta;
+    f32 speed;
+    vec2 mouse_sensitivity;
+    f32 scroll_sensitivity;
+    f32 FOV;
+    f32 near_plane;
+    f32 far_plane;
 };
 
-static void load_default_camera_settings(CameraSettings *settings) {
-    settings->alpha = -90.0f;
-    settings->beta = 0.0f;
-    settings->mov_speed = 2.5f;
-    settings->sens_x = 0.1f;
-    settings->sens_y = 0.1;
-    settings->sens_scroll = 3.0f;
-    settings->FOV = 45.0f;
-    settings->near_plane = 0.05f;
-    settings->far_plane = 100.0f;
+game_camera_settings DefaultCameraSettings()
+{
+    game_camera_settings result = {};
+    result.alpha = -90.f;
+    result.beta = 0.0f;
+    result.speed = 2.5f;
+    result.mouse_sensitivity = Vec2(0.1f, 0.1f);
+    result.scroll_sensitivity = 3.0f;
+    result.FOV = 45.0f;
+    result.near_plane = 0.05f;
+    result.far_plane = 100.0f; 
+
+    return(result);
 }
 
-struct Camera {
-    enum direction {
-        FORWARD = 0,
-        BACKWARD = 1,
-        LEFT = 2,
-        RIGHT = 3,
-    };
+#if 0
+
+struct game_camera
+{
+    vec3 position;
+    vec3 front;
+    vec3 up;
+    vec3 right;
+    vec3 world_up;
+    game_camera_settings settings;
+};
+
+void UpdateCameraVectors(game_camera *camera)
+{
+    vec3 new_front = Vec3(
+        Cosine(DegreesToRadians(camera->settings.alpha)) * Cosine(DegreesToRadians(camera->settings.beta)),
+        Sine(DegreesToRadians(camera->settings.beta)),
+        Sine(DegreesToRadians(camera->settings.alpha)) * Cosine(DegreesToRadians(camera->settings.beta))
+    );
+    camera->front = Normalize(new_front);
+    camera->right = Normalize(Cross(camera->front, camera->world_up));
+    camera->up = Normalize(Cross(camera->right, camera->front));
+}
+
+game_camera DefaultCamera()
+{
+    game_camera result = {};
+    result.position = Vec3(0.0f, 0.0f, 0.0f);
+    result.front = Vec3(0.0f, 0.0f, -1.0f);
+    result.up = Vec3(0.0f, 1.0f, 0.0f);
+    result.world_up = result.up;
+    result.right = Vec3(1.0f, 0.0f, 0.0f);
+    result.settings = DefaultCameraSettings();
+
+    return(result);
+}
+#else
+struct game_camera {
     glm::vec3 position;
     glm::vec3 front;
     glm::vec3 up;
     glm::vec3 right;
     glm::vec3 world_up;
-    CameraSettings settings;
-    Camera(glm::vec3 position, CameraSettings settings);
-    Camera(glm::vec3 position);
-    Camera(CameraSettings settings);
-    Camera();
-    glm::mat4 view_matrix();
-    glm::mat4 perspective_projection(real32 window_width, real32 window_height);
-    void update_vectors();
-    void move(direction dir, real32 delta_time);
-    void process_mouse(real32 offsetX, real32 offsetY);
-    void process_scroll(real32 offsetY);
+    game_camera_settings settings;
+    game_camera(glm::vec3 position, game_camera_settings settings);
+    game_camera(glm::vec3 position);
+    game_camera(game_camera_settings settings);
+    game_camera();
 };
 
-Camera::Camera(glm::vec3 position, CameraSettings settings) {
+game_camera::game_camera() {
     this->front = glm::vec3(0.0f, 0.0f, -1.0f);
-    this->settings = settings;
-    this->position = position;
-    this->up = glm::vec3(0.0f, 1.0f, 0.0f);
-    this->world_up = glm::vec3(0.0f, 1.0f, 0.0f);
-    update_vectors();
-}
-
-Camera::Camera(glm::vec3 position) {
-    this->front = glm::vec3(0.0f, 0.0f, -1.0f);
-    load_default_camera_settings(&this->settings);
-    this->position = position;
-    this->up = glm::vec3(0.0f, 1.0f, 0.0f);
-    this->world_up = glm::vec3(0.0f, 1.0f, 0.0f);
-    update_vectors();
-}
-
-Camera::Camera(CameraSettings settings) {
-    this->front = glm::vec3(0.0f, 0.0f, -1.0f);
-    this->settings = settings;
+    this->settings = DefaultCameraSettings();
     this->position = glm::vec3(0.0f, 0.0f, 0.0f);
     this->up = glm::vec3(0.0f, 1.0f, 0.0f);
     this->world_up = glm::vec3(0.0f, 1.0f, 0.0f);
-    update_vectors();
+    this->right = glm::vec3(1.0f, 0.0f, 0.0f);
 }
 
-Camera::Camera() {
-    this->front = glm::vec3(0.0f, 0.0f, -1.0f);
-    load_default_camera_settings(&this->settings);
-    this->position = glm::vec3(0.0f, 0.0f, 0.0f);
-    this->up = glm::vec3(0.0f, 1.0f, 0.0f);
-    this->world_up = glm::vec3(0.0f, 1.0f, 0.0f);
-    update_vectors();
-}
-
-glm::mat4 Camera::view_matrix() {
-    return glm::lookAt(this->position, this->position + this->front, this->up);
-}
-
-glm::mat4 Camera::perspective_projection(real32 window_width, real32 window_height) {
-    glm::mat4 result = glm::perspective(glm::radians(this->settings.FOV), window_width / window_height, this->settings.near_plane, this->settings.far_plane);
-    return result;
-}
-
-void Camera::update_vectors() {
+void UpdateCameraVectors(game_camera *camera) {
     glm::vec3 tmp;
-    tmp.x = cos(glm::radians(this->settings.alpha)) * cos(glm::radians(this->settings.beta));
-    tmp.y = sin(glm::radians(this->settings.beta));
-    tmp.z = sin(glm::radians(this->settings.alpha)) * cos(glm::radians(this->settings.beta));
-    this->front = glm::normalize(tmp);
-    this->right = glm::normalize(glm::cross(this->front, this->world_up));
-    this->up = glm::normalize(glm::cross(this->right, this->front));
+    tmp.x = cos(glm::radians(camera->settings.alpha)) * cos(glm::radians(camera->settings.beta));
+    tmp.y = sin(glm::radians(camera->settings.beta));
+    tmp.z = sin(glm::radians(camera->settings.alpha)) * cos(glm::radians(camera->settings.beta));
+    camera->front = glm::normalize(tmp);
+    camera->right = glm::normalize(glm::cross(camera->front, camera->world_up));
+    camera->up = glm::normalize(glm::cross(camera->right, camera->front));
+}
+#endif
+
+glm::mat4 CameraViewMatrix(game_camera *camera)
+{
+    glm::mat4 result = glm::lookAt(
+        camera->position,
+        camera->position + camera->front,
+        camera->up
+    );
+    return(result);
 }
 
-void Camera::move(direction dir, real32 delta_time) {
-    real32 velocity = this->settings.mov_speed * delta_time;
+glm::mat4 PerspectiveProjection(game_camera *camera, f32 window_width, f32 window_height) 
+{
+    glm::mat4 result = glm::perspective(
+        DegreesToRadians(camera->settings.FOV),
+        window_width / window_height,
+        camera->settings.near_plane,
+        camera->settings.far_plane
+    );
+    
+    return(result);
+}
+
+void MoveCamera(game_camera *camera, CameraDirection dir, f32 delta_time) {
+    f32 velocity = camera->settings.speed * delta_time;
     switch (dir) {
-    case FORWARD: {
-        this->position += this->front * velocity;
-    } break;
-    case BACKWARD: {
-        this->position -= this->front * velocity;
-    } break;
-    case LEFT: {
-        this->position -= this->right * velocity;
-    } break;
-    case RIGHT: {
-        this->position += right * velocity;
-    } break;
+        case FORWARD: {
+            camera->position += camera->front * velocity;
+        } break;
+        case BACKWARD: {
+            camera->position -= camera->front * velocity;
+        } break;
+        case LEFT: {
+            camera->position -= camera->right * velocity;
+        } break;
+        case RIGHT: {
+            camera->position += camera->right * velocity;
+        } break;
     }
 }
 
-void Camera::process_mouse(real32 offsetX, real32 offsetY) {
-    offsetX *= this->settings.sens_x;
-    offsetY *= this->settings.sens_y;
-    this->settings.alpha += offsetX;
-    this->settings.beta += offsetY;
+void ProcessCameraMouse(game_camera *camera, vec2 offset) 
+{
+    offset = Hadamard(offset, camera->settings.mouse_sensitivity);
+    camera->settings.alpha += offset.x;
+    camera->settings.beta += offset.y;
 
-    if (this->settings.beta > 89.0f) {
-        this->settings.beta = 89.0f;
-    } else if (this->settings.beta < -89.0f) {
-        this->settings.beta = -89.0f;
+    if (camera->settings.beta > 89.0f) {
+        camera->settings.beta = 89.0f;
+    } else if (camera->settings.beta < -89.0f) {
+        camera->settings.beta = -89.0f;
     }
-    update_vectors();
+
+    UpdateCameraVectors(camera);
 }
 
-void Camera::process_scroll(real32 offsetY) {
-    this->settings.FOV -= (real32)offsetY * this->settings.sens_scroll;
-    if (this->settings.FOV < 1.0f) {
-        this->settings.FOV = 1.0f;
-    } else if (this->settings.FOV > 90.0f) {
-        this->settings.FOV = 90.0f;
+void ProcessCameraScroll(game_camera *camera, f32 offset) 
+{
+    camera->settings.FOV -= offset * camera->settings.scroll_sensitivity;
+    if (camera->settings.FOV < 1.0f) {
+        camera->settings.FOV = 1.0f;
+    } else if (camera->settings.FOV > 90.0f) {
+        camera->settings.FOV = 90.0f;
     }
 }
 

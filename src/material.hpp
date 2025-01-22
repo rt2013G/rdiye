@@ -9,8 +9,6 @@
 #include "string"
 #include "unordered_map"
 
-#include "defines.h"
-
 #include "shader.hpp"
 
 #define ASSETS_FOLDER "assets/"

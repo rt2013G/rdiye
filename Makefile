@@ -1,10 +1,10 @@
-FLAGS = -std=c++11 -O0 -Wall -Werror -g
-OGL = -lGL -lGLU -lX11 -lXxf86vm -lXrandr -lpthread -lXi -lglfw3
-LIBS = src/lib/glad.c src/lib/stb/stb_image.cpp -lassimp
+compiler_flags = -std=c++11 -O0 -Wall -Werror -g
+linkers_flags = -lGL -lGLU -lX11 -lXxf86vm -lXrandr -lpthread -lXi -lglfw3
+files = src/include/glad.c src/lib/stb/stb_image.cpp -lassimp
+build_flags = -DDEBUG_BUILD=1
 
-run: build
+all: build run
+run:
 	@./bin/out
 build:
-	g++ $(FLAGS) src/main.cpp $(LIBS) -o bin/out $(OGL)
-tests:
-	g++ $(FLAGS) src/tests/test.cpp $(LIBS) -o bin/test_out $(OGL) && ./bin/test_out
+	g++ $(compiler_flags) src/rdiye.cpp $(files) $(build_flags) -o bin/out $(linkers_flags)
