@@ -3,36 +3,35 @@
 
 #include "glad/glad.h"
 
-#include "lib/glm/glm.hpp"
-
 #include "shader.hpp"
 
 #define MAX_POINT_LIGHT_COUNT 16
 
 struct DirectionalLight {
-    glm::vec3 ambient = glm::vec3(0.05f, 0.05f, 0.05f);
-    glm::vec3 diffuse = glm::vec3(0.4f, 0.4f, 0.4f);
-    glm::vec3 specular = glm::vec3(0.5f, 0.5f, 0.5f);
-    glm::vec3 direction;
+    vec3 ambient = Vec3(0.05f, 0.05f, 0.05f);
+    vec3 diffuse = Vec3(0.4f, 0.4f, 0.4f);
+    vec3 specular = Vec3(0.5f, 0.5f, 0.5f);
+    vec3 direction;
 };
 
 struct PointLight {
-    glm::vec3 ambient = glm::vec3(0.2f, 0.2f, 0.2f);
-    glm::vec3 diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
-    glm::vec3 specular = glm::vec3(1.0f, 1.0f, 1.0f);
-    glm::vec3 position;
+    vec3 ambient = Vec3(0.2f, 0.2f, 0.2f);
+    vec3 diffuse = Vec3(0.5f, 0.5f, 0.5f);
+    vec3 specular = Vec3(1.0f, 1.0f, 1.0f);
+    vec3 position;
     float constant_factor = 1.0f;
     float linear_factor = 0.09f;
     float quadratic_factor = 0.032f;
 };
 
-void load_point_lights(PointLight *plights, glm::vec3 *positions, int32_t point_light_count) {
-    assert(point_light_count <= MAX_POINT_LIGHT_COUNT);
+void load_point_lights(PointLight *plights, vec3 *positions, int32_t point_light_count) {
+    Assert(point_light_count <= MAX_POINT_LIGHT_COUNT);
     for (int32_t i = 0; i < point_light_count; i++) {
         plights[i].position = positions[i];
     }
 }
 
+#if 0
 void set_shader_lighting_data(ShaderProgram &shader, DirectionalLight dir_light, PointLight *point_lights, int32_t point_light_count) {
     assert(point_light_count <= MAX_POINT_LIGHT_COUNT);
     shader.set_vec3("dir_light.ambient", dir_light.ambient);
@@ -51,5 +50,6 @@ void set_shader_lighting_data(ShaderProgram &shader, DirectionalLight dir_light,
     }
     shader.set_int("point_light_count", point_light_count);
 }
+#endif
 
 #endif

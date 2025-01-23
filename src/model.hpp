@@ -3,7 +3,6 @@
 
 #include "glad/glad.h"
 
-#include "lib/glm/glm.hpp"
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -65,9 +64,9 @@ void draw_skybox(BasicMesh &skybox_mesh, ShaderProgram &skybox_shader, GLuint sk
 }
 
 struct Vertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec2 tex_coords;
+    vec3 position;
+    vec3 normal;
+    vec2 tex_coords;
 };
 
 struct Mesh {
@@ -142,13 +141,13 @@ void load_assimp_material(Material &material, aiMaterial *assimp_mat, std::strin
     aiColor3D color(0.0f, 0.0f, 0.0f);
 
     assimp_mat->Get(AI_MATKEY_COLOR_AMBIENT, color);
-    glm::vec3 ambient_color = glm::vec3(color.r, color.g, color.b);
+    vec3 ambient_color = Vec3(color.r, color.g, color.b);
 
     assimp_mat->Get(AI_MATKEY_COLOR_DIFFUSE, color);
-    glm::vec3 diffuse_color = glm::vec3(color.r, color.g, color.b);
+    vec3 diffuse_color = Vec3(color.r, color.g, color.b);
 
     assimp_mat->Get(AI_MATKEY_COLOR_SPECULAR, color);
-    glm::vec3 specular_color = glm::vec3(color.r, color.g, color.b);
+    vec3 specular_color = Vec3(color.r, color.g, color.b);
 
     float shininess = 1.0f;
     assimp_mat->Get(AI_MATKEY_SHININESS, shininess);
@@ -163,7 +162,7 @@ Mesh process_model_mesh(Model &model, aiMesh *mesh, const aiScene *scene) {
 
     for (uint32_t i = 0; i < mesh->mNumVertices; i++) {
         Vertex vertex;
-        glm::vec3 vector;
+        vec3 vector;
         vector.x = mesh->mVertices[i].x;
         vector.y = mesh->mVertices[i].y;
         vector.z = mesh->mVertices[i].z;
@@ -175,12 +174,12 @@ Mesh process_model_mesh(Model &model, aiMesh *mesh, const aiScene *scene) {
         vertex.normal = vector;
 
         if (mesh->mTextureCoords[0]) {
-            glm::vec2 vec;
+            vec2 vec;
             vec.x = mesh->mTextureCoords[0][i].x;
             vec.y = mesh->mTextureCoords[0][i].y;
             vertex.tex_coords = vec;
         } else {
-            vertex.tex_coords = glm::vec2(0.0f, 0.0f);
+            vertex.tex_coords = Vec2(0.0f, 0.0f);
         }
 
         vertices.push_back(vertex);

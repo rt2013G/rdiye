@@ -2,6 +2,7 @@
 
 in vec3 fragment_position;
 in vec3 normal;
+in vec2 tex_coords;
 
 out vec4 frag_color;
 
@@ -19,9 +20,11 @@ struct point_light
 uniform point_light lights[MAX_LIGHTS];
 uniform int light_count;
 
+uniform sampler2D diffuse;
+
 void main()
 {
-    frag_color = vec4(ambient_color, 1.0f);
+    frag_color = vec4(texture(diffuse, tex_coords).rgb, 1.0f);
 
     vec3 n = normalize(normal);
     vec3 v = normalize(viewer_position - fragment_position);

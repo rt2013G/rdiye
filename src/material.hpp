@@ -3,7 +3,7 @@
 
 #include "glad/glad.h"
 
-#include "lib/stb/stb_image.h"
+#include "thirdparty/stb/stb_image.h"
 
 #include "iostream"
 #include "string"
@@ -81,9 +81,9 @@ GLuint load_cubemap(std::string *face_names, u32 face_len) {
 }
 
 struct Material {
-    glm::vec3 ambient_color;
-    glm::vec3 diffuse_color;
-    glm::vec3 specular_color;
+    vec3 ambient_color;
+    vec3 diffuse_color;
+    vec3 specular_color;
     GLuint diffuse;
     GLuint specular;
     float shininess;
@@ -93,7 +93,7 @@ struct Material {
 
 void load_material(Material &material, std::string diffuse_name = TEXTURE_DEFAULT_BLACK, std::string specular_name = TEXTURE_DEFAULT_BLACK, float shininess = 1,
                    std::string normal_name = TEXTURE_DEFAULT_NORMAL_MAP, std::string parallax_name = TEXTURE_DEFAULT_BLACK,
-                   glm::vec3 ambient_color = glm::vec3(1.0f), glm::vec3 diffuse_color = glm::vec3(1.0f), glm::vec3 specular_color = glm::vec3(1.0f)) {
+                   vec3 ambient_color = Vec3(1.0f), vec3 diffuse_color = Vec3(1.0f), vec3 specular_color = Vec3(1.0f)) {
     material.ambient_color = ambient_color;
     material.diffuse_color = diffuse_color;
     material.specular_color = specular_color;

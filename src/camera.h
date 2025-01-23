@@ -71,46 +71,15 @@ void UpdateCameraVectors(game_camera *camera)
     );
     camera->front = Normalize(new_front);
     camera->right = Normalize(Cross(camera->front, camera->world_up));
-
-    // NOTE, TODO: i assume that because of the right-handedness this needs to be negated
-    //             otherwise the vector obtained by the cross product would actually point down
-    //             maybe check this assumption in the future
-    camera->up = - Normalize(Cross(camera->right, camera->front));
+    camera->up = Normalize(Cross(camera->right, camera->front));
 }
 
-#if 1
-glm::mat4 CameraViewMatrix(game_camera *camera)
+mat4x4 CameraViewMatrix(game_camera *camera)
 {
-    glm::mat4 result = glm::lookAt(
-        Vec3ToGlm(camera->position),
-        Vec3ToGlm(camera->position + camera->front),
-        Vec3ToGlm(camera->up)
-    );
-    return(result);
-}
-#else
-mat4x4 LookAt(vec3 eye_position, vec3 target, vec3 camera_up)
-{
-    vec3 front = Normalize(eye_position - target);
-    vec3 right = Normalize(Cross(camera_up, front));
-    vec3 up = Normalize(Cross(front, right));
-
-    mat4x4 result = {{
-        {right.x, right.y, right.z, -eye_position.x},
-        {up.x, up.y, up.z, -eye_position.y},
-        {front.x, front.y, front.z, -eye_position.z},
-        {0, 0, 0, 1.0f}
-    }};
+    mat4x4 result = LookAt(camera->position, camera->position + camera->front, camera->up);
 
     return(result);
 }
-glm::mat4 CameraViewMatrix(game_camera *camera)
-{
-    glm::mat4 result = Mat4ToGlm(LookAt(camera->position, camera->position + camera->front, camera->up));
-
-    return(result);
-}
-#endif
 
 mat4x4 PerspectiveProjection(game_camera *camera, f32 window_width, f32 window_height)
 {

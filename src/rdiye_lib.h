@@ -1,8 +1,6 @@
 #ifndef RDIYE_LIB_H
 #define RDIYE_LIB_H
 
-#pragma once
-
 #include "math.h"
 
 #define INTERNAL static
@@ -169,6 +167,13 @@ inline vec3 Vec3(vec2 xy, f32 z)
     result.x = xy.x;
     result.y = xy.y;
     result.z = z;
+
+    return(result);
+}
+
+inline vec3 Vec3(f32 value)
+{
+    vec3 result = Vec3(value, value, value);
 
     return(result);
 }
@@ -416,7 +421,7 @@ inline vec3 Cross(vec3 a, vec3 b)
 {
     vec3 result = {};
     result.x = a.y * b.z - a.z * b.y;
-    result.y = a.x * b.z - a.z * b.x;
+    result.y = a.z * b.x - a.x * b.z;
     result.z = a.x * b.y - a.y * b.x;
 
     return(result);
@@ -660,26 +665,18 @@ mat4x4 Perspective(f32 FOV, f32 aspect_ratio, f32 near_plane, f32 far_plane)
     return(result);
 }
 
-// TODO: remove this later
-#include "lib/glm/glm.hpp"
-glm::vec3 Vec3ToGlm(vec3 src)
+mat4x4 LookAt(vec3 eye_position, vec3 target, vec3 camera_up)
 {
-    glm::vec3 result = glm::vec3(src.x, src.y, src.z);
+    vec3 front = Normalize(target - eye_position);
+    vec3 right = Normalize(Cross(front, camera_up));
+    vec3 up = Normalize(Cross(right, front));
 
-    return(result);
-}
-vec3 GlmToVec3(glm::vec3 vec)
-{
-    vec3 result = Vec3(vec.x, vec.y, vec.z);
-
-    return(result);
-}
-glm::mat4 Mat4ToGlm(mat4x4 src)
-{
-    glm::mat4 result = glm::mat4(src.e[0][0], src.e[1][0], src.e[2][0], src.e[3][0],
-                                src.e[0][1], src.e[1][1], src.e[2][1], src.e[3][1],
-                                src.e[0][2], src.e[1][2], src.e[2][2], src.e[3][2],
-                                src.e[0][3], src.e[1][3], src.e[2][3], src.e[3][3]);
+    mat4x4 result = {{
+        {right.x, right.y, right.z, -DotProduct(right, eye_position)},
+        {up.x, up.y, up.z, -DotProduct(up, eye_position)},
+        {-front.x, -front.y, -front.z, DotProduct(front, eye_position)},
+        {0, 0, 0, 1.0f}
+    }};
 
     return(result);
 }

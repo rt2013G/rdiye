@@ -2,16 +2,12 @@
 // NOTE: include glad before glfw
 #include "GLFW/glfw3.h"
 
-#include "lib/glm/glm.hpp"
-#include "lib/glm/gtc/matrix_transform.hpp"
-#include "lib/glm/gtc/type_ptr.hpp"
-#include "lib/stb/stb_image.h"
+#include "thirdparty/stb/stb_image.h"
 
 #include "rdiye_lib.h"
 #include "camera.h"
 
 #include "data.hpp"
-#include "game_object.hpp"
 #include "lighting.hpp"
 #include "material.hpp"
 #include "model.hpp"
@@ -84,6 +80,14 @@ void ProcessInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
     {
         MoveCamera(&state.player_camera, RIGHT, state.delta_time);
+    }
+    if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+    {
+        state.player_camera.settings.speed = 5.0f;
+    }
+    else
+    {
+       state.player_camera.settings.speed = 2.5f; 
     }
 }
 
@@ -263,8 +267,60 @@ void GameRun(void)
     glfwTerminate();
 }
 #else
+
+GLuint LoadTexture(std::string filename)
+{
+    GLuint texture_id;
+    glGenTextures(1, &texture_id);
+    i32 texture_width, texture_height, channel_count;
+    stbi_set_flip_vertically_on_load(true);
+
+    std::string path = ASSETS_FOLDER + filename;
+    u8 *data = stbi_load(path.c_str(), &texture_width, &texture_height, &channel_count, 0);
+    if(data)
+    {
+        GLenum format;
+        if(channel_count == 1)
+        {
+            format = GL_RED;
+        }
+        else if(channel_count == 3)
+        {
+            format = GL_RGB;
+        }
+        else if(channel_count == 4)
+        {
+            format = GL_RGBA;
+        }
+        glBindTexture(GL_TEXTURE_2D, texture_id);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, texture_width, texture_height, 
+                     0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    else
+    {
+        Assert(!"failed to load texture");
+    }
+
+    stbi_image_free(data);
+    stbi_set_flip_vertically_on_load(false);
+
+    return(texture_id);
+}
+
 void GameRun()
 {
+    ShaderProgram object_shader = ShaderProgram("src/shaders/rtr/vs.glsl", "src/shaders/rtr/fs.glsl");
+    ShaderProgram light_shader = ShaderProgram("src/shaders/rtr/lighting.vs.glsl", "src/shaders/rtr/lighting.fs.glsl");
+
+    GLuint cube_diffuse = LoadTexture("container2.png");
+    GLuint wood_diffuse = LoadTexture("wood.png");
+
     GLuint cube_vao, cube_vbo;
     glGenVertexArrays(1, &cube_vao);
     glGenBuffers(1, &cube_vbo);
@@ -272,6 +328,21 @@ void GameRun()
     glBindBuffer(GL_ARRAY_BUFFER, cube_vbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(CUBE_VERTICES_TEXTURED), &CUBE_VERTICES_TEXTURED[0], GL_STATIC_DRAW);
     GLsizei cube_triangles_count = sizeof(CUBE_VERTICES_TEXTURED) / (sizeof(f32) * 8); 
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(3 * sizeof(f32)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(6 * sizeof(f32)));
+    glBindVertexArray(0);
+
+    GLuint plane_vao, plane_vbo;
+    glGenVertexArrays(1, &plane_vao);
+    glGenBuffers(1, &plane_vbo);
+    glBindVertexArray(plane_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, plane_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(PLANE_VERTICES), &PLANE_VERTICES[0], GL_STATIC_DRAW);
+    GLsizei plane_triangles_count = sizeof(PLANE_VERTICES) / (sizeof(f32) * 8); 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)0);
     glEnableVertexAttribArray(1);
@@ -303,8 +374,14 @@ void GameRun()
     vec3 warm_color = Vec3(0.7f, 0.5f, 0.5f);
     vec3 light_color = Vec3(1.0f, 1.0f, 1.0f);
 
-    ShaderProgram object_shader = ShaderProgram("src/shaders/rtr/vs.glsl", "src/shaders/rtr/fs.glsl");
-    ShaderProgram light_shader = ShaderProgram("src/shaders/rtr/lighting.vs.glsl", "src/shaders/rtr/lighting.fs.glsl");
+    vec3 transparent_cube_positions[4] =
+    {
+        Vec3(0.5f, 2.0f, 1.5f),
+        Vec3(-0.2f, -1.0f, -1.0f),
+        Vec3(2.0f, 1.5f, 0.5f),
+        Vec3(0.5f, 3.0f, -1.0f),
+    };
+    f32 transparent_cube_size = 0.8f;
     
     while(state.is_running)
     {
@@ -317,41 +394,64 @@ void GameRun()
         glClearColor(0.2, 0.2, 0.2, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        glm::mat4 projection = Mat4ToGlm(PerspectiveProjection(&state.player_camera, state.window_width, state.window_height));
-        glm::mat4 view = CameraViewMatrix(&state.player_camera);
-        glm::mat4 projection_mul_view = projection * view;
-
-        vec3 cube_position = Vec3(1.0f, 0.0f, -3.0f);
-        mat4x4 model = Translation(cube_position) * Scaling(0.5f);
-
-        object_shader.use();
-        object_shader.set_mat4("model", Mat4ToGlm(model));
-        object_shader.set_mat4("projection_mul_view", projection_mul_view);
-        object_shader.set_vec3("viewer_position", Vec3ToGlm(state.player_camera.position));
-        object_shader.set_vec3("ambient_color", Vec3ToGlm(ambient_color));
-        object_shader.set_vec3("surface_color", Vec3ToGlm(surface_color));
-        object_shader.set_vec3("warm_color", Vec3ToGlm(warm_color));
-        object_shader.set_vec3("lights[0].position", Vec3ToGlm(light_positions[0]));
-        object_shader.set_vec3("lights[1].position", Vec3ToGlm(light_positions[1]));
-        object_shader.set_vec3("lights[0].color", Vec3ToGlm(light_color));
-        object_shader.set_vec3("lights[1].color", Vec3ToGlm(light_color));
-        object_shader.set_int("light_count", point_light_count);
-        glBindVertexArray(cube_vao);
-        glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
-        glBindVertexArray(0);
-
-        model = Translation(light_positions[0]) * Scaling(0.05f);
+        mat4x4 projection = PerspectiveProjection(&state.player_camera, state.window_width, state.window_height);
+        mat4x4 view = CameraViewMatrix(&state.player_camera);
+        mat4x4 projection_mul_view = projection * view;
+        
+        mat4x4 model = Translation(light_positions[0]) * Scaling(0.05f);
         light_shader.use();
-        light_shader.set_mat4("model", Mat4ToGlm(model));
+        light_shader.set_mat4("model", model);
         light_shader.set_mat4("projection_mul_view", projection_mul_view);
         glBindVertexArray(light_vao);
         glDrawArrays(GL_TRIANGLES, 0, light_triangles_count);
 
         model = Translation(light_positions[1]) * Scaling(0.1f);
-        light_shader.set_mat4("model", Mat4ToGlm(model));
+        light_shader.set_mat4("model", model);
         glBindVertexArray(light_vao);
         glDrawArrays(GL_TRIANGLES, 0, light_triangles_count);
         glBindVertexArray(0);
+        
+        object_shader.use();
+        object_shader.set_mat4("projection_mul_view", projection_mul_view);
+        object_shader.set_vec3("viewer_position", state.player_camera.position);
+        object_shader.set_vec3("ambient_color", ambient_color);
+        object_shader.set_vec3("surface_color", surface_color);
+        object_shader.set_vec3("warm_color", warm_color);
+        object_shader.set_vec3("lights[0].position", light_positions[0]);
+        object_shader.set_vec3("lights[1].position", light_positions[1]);
+        object_shader.set_vec3("lights[0].color", light_color);
+        object_shader.set_vec3("lights[1].color", light_color);
+        object_shader.set_int("light_count", point_light_count);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, wood_diffuse);
+        object_shader.set_int("diffuse", 0);
+        vec3 plane_position = Vec3(0.0f, -3.0f, 0.0f);
+        model = Translation(plane_position);
+        object_shader.set_mat4("model", model);
+        glBindVertexArray(plane_vao);
+        glDrawArrays(GL_TRIANGLES, 0, plane_triangles_count);
+        glBindVertexArray(0);
+
+        glBindTexture(GL_TEXTURE_2D, cube_diffuse);
+        vec3 cube_position = Vec3(1.0f, 0.0f, -3.0f);
+        model = Translation(cube_position) * Scaling(0.5f);
+        object_shader.set_mat4("model", model);
+        glBindVertexArray(cube_vao);
+        glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
+        glBindVertexArray(0);
+
+        for(u32 i = 0; i < ArrayCount(transparent_cube_positions); i++)
+        {
+            vec3 cube_position = transparent_cube_positions[i];
+            model = Translation(cube_position) * Scaling(transparent_cube_size);
+            object_shader.set_mat4("model", model);
+            glBindVertexArray(cube_vao);
+            glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
+            glBindVertexArray(0);
+        }
+
+        glBindTexture(GL_TEXTURE_2D, 0);
 
         glfwSwapBuffers(state.window);
         glfwPollEvents(); 
