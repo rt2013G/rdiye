@@ -19,8 +19,6 @@ rm -rf glfw
 
 ## INSTALL GLAD: https://glad.dav1d.de/
 
-## INSTALL GLM: https://github.com/g-truc/glm/releases
-
 git clone https://github.com/nothings/stb
 mv stb/stb_image.h src/lib/stb/
 rm -rf stb

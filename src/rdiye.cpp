@@ -318,7 +318,9 @@ void GameRun()
     ShaderProgram object_shader = ShaderProgram("src/shaders/rtr/vs.glsl", "src/shaders/rtr/fs.glsl");
     ShaderProgram light_shader = ShaderProgram("src/shaders/rtr/lighting.vs.glsl", "src/shaders/rtr/lighting.fs.glsl");
 
+    GLuint black_texture = LoadTexture(TEXTURE_DEFAULT_BLACK);
     GLuint cube_diffuse = LoadTexture("container2.png");
+    GLuint cube_specular = LoadTexture("container2_s.png");
     GLuint wood_diffuse = LoadTexture("wood.png");
 
     GLuint cube_vao, cube_vbo;
@@ -367,11 +369,6 @@ void GameRun()
     light_positions[0] = Vec3(2.0f, 2.0f, -1.5f);
     light_positions[1] = Vec3(2.5f, 1.5f, -2.5f);
     i32 point_light_count = 2;
-
-    vec3 surface_color = Vec3(0.5f, 0.1f, 0.1f);
-    vec3 cool_color = Vec3(0, 0, 0.55f) + (0.25f * surface_color);
-    vec3 ambient_color = cool_color / 2;
-    vec3 warm_color = Vec3(0.7f, 0.5f, 0.5f);
     vec3 light_color = Vec3(1.0f, 1.0f, 1.0f);
 
     vec3 transparent_cube_positions[4] =
@@ -414,26 +411,29 @@ void GameRun()
         object_shader.use();
         object_shader.set_mat4("projection_mul_view", projection_mul_view);
         object_shader.set_vec3("viewer_position", state.player_camera.position);
-        object_shader.set_vec3("ambient_color", ambient_color);
-        object_shader.set_vec3("surface_color", surface_color);
-        object_shader.set_vec3("warm_color", warm_color);
         object_shader.set_vec3("lights[0].position", light_positions[0]);
         object_shader.set_vec3("lights[1].position", light_positions[1]);
         object_shader.set_vec3("lights[0].color", light_color);
         object_shader.set_vec3("lights[1].color", light_color);
         object_shader.set_int("light_count", point_light_count);
+        object_shader.set_int("diffuse_texture", 0);
+        object_shader.set_int("specular_texture", 1);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, wood_diffuse);
-        object_shader.set_int("diffuse", 0);
-        vec3 plane_position = Vec3(0.0f, -3.0f, 0.0f);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, black_texture);
+        vec3 plane_position = Vec3(0.0f, 0.0f, 0.0f);
         model = Translation(plane_position);
         object_shader.set_mat4("model", model);
         glBindVertexArray(plane_vao);
         glDrawArrays(GL_TRIANGLES, 0, plane_triangles_count);
         glBindVertexArray(0);
 
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, cube_diffuse);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, cube_specular);
         vec3 cube_position = Vec3(1.0f, 0.0f, -3.0f);
         model = Translation(cube_position) * Scaling(0.5f);
         object_shader.set_mat4("model", model);
@@ -443,7 +443,7 @@ void GameRun()
 
         for(u32 i = 0; i < ArrayCount(transparent_cube_positions); i++)
         {
-            vec3 cube_position = transparent_cube_positions[i];
+            cube_position = transparent_cube_positions[i];
             model = Translation(cube_position) * Scaling(transparent_cube_size);
             object_shader.set_mat4("model", model);
             glBindVertexArray(cube_vao);
