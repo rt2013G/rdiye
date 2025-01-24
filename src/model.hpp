@@ -8,59 +8,100 @@
 #include <assimp/scene.h>
 
 #include "vector"
+#include "unordered_map"
 
-#include "material.hpp"
 #include "shader.hpp"
 
-struct BasicMesh {
-    GLuint VAO, VBO;
-    uint32_t vertices_size;
+static std::unordered_map<std::string, GLuint> global_loaded_textures;
+
+GLuint load_texture(std::string filename) {
+    if (global_loaded_textures.find(filename) != global_loaded_textures.end()) {
+        return global_loaded_textures.at(filename);
+    }
+    GLuint tex_id;
+    glGenTextures(1, &tex_id);
+    i32 tex_width, tex_height, num_channels;
+    stbi_set_flip_vertically_on_load(true);
+    std::string path = ASSETS_FOLDER + filename;
+    unsigned char *data = stbi_load(path.c_str(), &tex_width, &tex_height, &num_channels, 0);
+    if (data) {
+        GLenum format;
+        if (num_channels == 1) {
+            format = GL_RED;
+        } else if (num_channels == 3) {
+            format = GL_RGB;
+        } else if (num_channels == 4) {
+            format = GL_RGBA;
+        }
+        glBindTexture(GL_TEXTURE_2D, tex_id);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, tex_width, tex_height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    } else {
+        std::cout << "ERROR. Failed to load texture at path: " << path << std::endl;
+        stbi_set_flip_vertically_on_load(false);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        return tex_id;
+    }
+    stbi_image_free(data);
+    stbi_set_flip_vertically_on_load(false);
+    global_loaded_textures.insert({filename, tex_id});
+
+    return tex_id;
+}
+
+struct Material {
+    vec3 ambient_color;
+    vec3 diffuse_color;
+    vec3 specular_color;
+    GLuint diffuse;
+    GLuint specular;
+    float shininess;
+    GLuint normal_map;
+    GLuint parallax_map;
 };
 
-void load_basic_mesh(BasicMesh &mesh, uint32_t vertices_size, const float *vertices) {
-    glGenVertexArrays(1, &mesh.VAO);
-    glGenBuffers(1, &mesh.VBO);
-    glBindVertexArray(mesh.VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
-    mesh.vertices_size = vertices_size;
-    glBufferData(GL_ARRAY_BUFFER, vertices_size, vertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(3 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
-    glBindVertexArray(0);
+void load_material(Material &material, std::string diffuse_name = TEXTURE_DEFAULT_BLACK, std::string specular_name = TEXTURE_DEFAULT_BLACK, float shininess = 1,
+                   std::string normal_name = TEXTURE_DEFAULT_NORMAL_MAP, std::string parallax_name = TEXTURE_DEFAULT_BLACK,
+                   vec3 ambient_color = Vec3(1.0f), vec3 diffuse_color = Vec3(1.0f), vec3 specular_color = Vec3(1.0f)) {
+    material.ambient_color = ambient_color;
+    material.diffuse_color = diffuse_color;
+    material.specular_color = specular_color;
+    material.diffuse = load_texture(diffuse_name);
+    material.specular = load_texture(specular_name);
+    material.shininess = shininess;
+    material.normal_map = load_texture(normal_name);
+    material.parallax_map = load_texture(parallax_name);
 }
 
-void draw_basic_mesh(BasicMesh &mesh, ShaderProgram &shader, Material &mat) {
-    set_material_in_shader(mat, shader);
-    glBindVertexArray(mesh.VAO);
-    glDrawArrays(GL_TRIANGLES, 0, mesh.vertices_size / (sizeof(float) * 8));
-    glBindVertexArray(0);
-}
+void set_material_in_shader(Material &mat, ShaderProgram &shader) {
+    shader.set_vec3("material.ambient_color", mat.ambient_color);
+    shader.set_vec3("material.diffuse_color", mat.diffuse_color);
+    shader.set_vec3("material.specular_color", mat.specular_color);
 
-void load_skybox_mesh(BasicMesh &mesh, uint32_t vertices_size, const float *vertices) {
-    glGenVertexArrays(1, &mesh.VAO);
-    glGenBuffers(1, &mesh.VBO);
-    glBindVertexArray(mesh.VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
-    mesh.vertices_size = vertices_size;
-    glBufferData(GL_ARRAY_BUFFER, vertices_size, vertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
-    glBindVertexArray(0);
-}
-
-void draw_skybox(BasicMesh &skybox_mesh, ShaderProgram &skybox_shader, GLuint skybox_texture) {
-    glDepthFunc(GL_LEQUAL);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture);
-    skybox_shader.set_int("skybox_cubemap", 0);
-    glBindVertexArray(skybox_mesh.VAO);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
-    glDepthFunc(GL_LESS);
+    glBindTexture(GL_TEXTURE_2D, mat.diffuse);
+    shader.set_int("material.diffuse", 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, mat.specular);
+    shader.set_int("material.specular", 1);
+
+    shader.set_float("material.shininess", mat.shininess);
+
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, mat.normal_map);
+    shader.set_int("material.normal_map", 2);
+
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, mat.parallax_map);
+    shader.set_int("material.parallax_map", 3);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 struct Vertex {

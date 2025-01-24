@@ -62,6 +62,10 @@ static_assert(sizeof(b32) == 4, "b32 size error");
 #define Minimum(A, B) ((A < B) ? (A) : (B))
 #define Maximum(A, B) ((A > B) ? (A) : (B))
 
+#define ASSETS_FOLDER "assets/"
+#define TEXTURE_DEFAULT_BLACK "TEXTURE_DEFAULT_BLACK.png"
+#define TEXTURE_DEFAULT_NORMAL_MAP "TEXTURE_DEFAULT_NORMAL_MAP.png"
+
 #define PI32 3.14159265359f
 
 #define DegreesToRadians(angle) ((angle) * PI32 / 180)
@@ -462,10 +466,40 @@ inline b32 IsInsideRectangle(rect3 rect, vec3 vec)
     return(result);
 }
 
+struct mat3x3
+{
+    f32 e[3][3];
+};
+
 struct mat4x4
 {
     f32 e[4][4];
 };
+
+inline mat3x3 Mat3x3(mat4x4 m4)
+{
+    mat3x3 result =
+    {{
+        {m4.e[0][0], m4.e[0][1], m4.e[0][2]},
+        {m4.e[1][0], m4.e[1][1], m4.e[1][2]},
+        {m4.e[2][0], m4.e[2][1], m4.e[2][2]},
+    }};
+    
+    return(result);
+}
+
+inline mat4x4 Mat4x4(mat3x3 m3)
+{
+   mat4x4 result =
+    {{
+        {m3.e[0][0], m3.e[0][1], m3.e[0][2], 0},
+        {m3.e[1][0], m3.e[1][1], m3.e[1][2], 0},
+        {m3.e[2][0], m3.e[2][1], m3.e[2][2], 0},
+        {0, 0, 0, 1},
+    }};
+    
+    return(result); 
+}
 
 inline mat4x4 operator*(mat4x4 A, mat4x4 B)
 {

@@ -8,7 +8,6 @@
 #include "camera.h"
 
 #include "data.hpp"
-#include "material.hpp"
 #include "model.hpp"
 #include "shader.hpp"
 
@@ -95,178 +94,6 @@ void ScrollCallback(GLFWwindow *window, f64 offset_x, f64 offset_y)
     ProcessCameraScroll(&state.player_camera, (f32)offset_y);
 }
 
-void GameInit()
-{
-    glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    GLFWwindow *window = glfwCreateWindow(window_width, window_height, "hello!", NULL, NULL);
-    if (window == NULL)
-    {
-        // TODO
-        return;
-    }
-    glfwMakeContextCurrent(window);
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-    {
-        // TODO
-        return;
-    }
-    glViewport(0, 0, window_width, window_height);
-
-    glfwSwapInterval(1);
-    glfwSetFramebufferSizeCallback(window, ResizeCallback);
-    glfwSetCursorPosCallback(window, MouseCallback);
-    glfwSetScrollCallback(window, ScrollCallback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-    glEnable(GL_DEPTH_TEST);
-
-    state.is_running = true;
-    state.window_width = window_width;
-    state.window_height = window_height;
-    state.last_time = 0.0f;
-    state.delta_time = 0.0f;
-    state.window = window;
-    state.player_camera = DefaultCamera();
-
-    mouse_last_movement = Vec2(state.window_width / 2.0f, state.window_height / 2.0f);
-}
-
-#if 0
-void GameRun(void)
-{
-    ShaderProgram lighting_shader("src/shaders/lighting_vs.glsl", "src/shaders/lighting_fs.glsl");
-    ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
-    ShaderProgram material_shader("src/shaders/material_vs.glsl", "src/shaders/material_fs.glsl");
-    ShaderProgram shadow_shader("src/shaders/shadow_map_vs.glsl", "src/shaders/shadow_map_fs.glsl");
-
-    BasicMesh skybox_mesh;
-    load_skybox_mesh(skybox_mesh, sizeof(SKYBOX_VERTICES), &SKYBOX_VERTICES[0]);
-    std::string cubemap_faces[] =
-    {
-        "skybox/right.jpg",
-        "skybox/left.jpg",
-        "skybox/top.jpg",
-        "skybox/bottom.jpg",
-        "skybox/front.jpg",
-        "skybox/back.jpg",
-    };
-    GLuint skybox_texture = load_cubemap(cubemap_faces, 6);
-
-    Material container_mat;
-    load_material(container_mat, "container2.png", "container2_s.png", 128);
-    BasicMesh container_mesh;
-    load_basic_mesh(container_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
-
-    BasicMesh wall_mesh;
-    load_basic_mesh(wall_mesh, sizeof(CUBE_VERTICES), &CUBE_VERTICES[0]);
-    Material wall_mat;
-    load_material(wall_mat, "brickwall.jpg", "brickwall.jpg", 128, "brickwall_n.jpg");
-
-    BasicMesh plane_mesh;
-    load_basic_mesh(plane_mesh, sizeof(PLANE_VERTICES), PLANE_VERTICES);
-    Material plane_mat;
-    load_material(plane_mat, "wood.png");
-
-    DirectionalLight dir_light;
-    dir_light.direction = glm::vec3(-0.2f, -1.0f, -0.3f);
-
-    u8 point_light_count = 3;
-    PointLight point_lights[MAX_POINT_LIGHT_COUNT];
-    glm::vec3 plight_positions[3] =
-    {
-        glm::vec3(1.2f, 1.0f, 2.0f),
-        glm::vec3(1.2f, 3.0f, 1.0f),
-        glm::vec3(1.2f, -3.0f, 1.0f),
-    };
-    load_point_lights(point_lights, plight_positions, point_light_count);
-
-    GameObject backpack = GameObject(material_shader, "backpack/backpack.obj");
-    backpack.move(glm::vec3(2.0f, -2.0f, -4.0f));
-    backpack.scale(glm::vec3(0.25f, 0.25f, 0.25f));
-    while (state.is_running)
-    {
-        f32 current_time = glfwGetTime();
-        // TODO: delta should be f64
-        state.delta_time = current_time - state.last_time;
-        state.last_time = current_time;
-
-        ProcessInput(state.window);
-
-        glClearColor(0, 0, 0, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        glm::mat4 projection = PerspectiveProjection(&state.player_camera, state.window_width, state.window_height);
-        glm::mat4 view = CameraViewMatrix(&state.player_camera);
-        glm::mat4 projection_mul_view = projection * view;
-        #if 0
-        glm::vec3 player_position = Vec3ToGlm(state.player_camera.position);
-        #else
-        glm::vec3 player_position = state.player_camera.position; 
-        #endif
-
-        lighting_shader.use();
-        for (u8 i = 0; i < point_light_count; i++)
-        {
-            glm::mat4 transform = glm::mat4(1.0f);
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::translate(model, plight_positions[i]);
-            model = glm::scale(model, glm::vec3(0.2f));
-            transform = projection * view * model * transform;
-            lighting_shader.set_mat4("transform", transform);
-            glBindVertexArray(light_cube_VAO);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
-
-        material_shader.use();
-        material_shader.set_mat4("projection_mul_view", projection_mul_view);
-        material_shader.set_vec3("viewer_position", player_position);
-        set_shader_lighting_data(material_shader, dir_light, point_lights, point_light_count);
-
-        glm::mat4 model = glm::mat4(1.0f);
-        glm::mat3 normal_matrix = glm::mat3(model);
-        normal_matrix = glm::inverse(normal_matrix);
-        normal_matrix = glm::transpose(normal_matrix);
-        material_shader.set_mat3("normal_matrix", normal_matrix);
-        material_shader.set_mat4("model", model);
-        draw_basic_mesh(container_mesh, material_shader, container_mat);
-
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(2.0f, 2.0f, 2.0f));
-        material_shader.set_mat4("model", model);
-        normal_matrix = glm::mat3(model);
-        normal_matrix = glm::inverse(normal_matrix);
-        normal_matrix = glm::transpose(normal_matrix);
-        material_shader.set_mat3("normal_matrix", normal_matrix);
-        draw_basic_mesh(wall_mesh, material_shader, wall_mat);
-
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.0f, -2.0f, 0.0f));
-        material_shader.set_mat4("model", model);
-        normal_matrix = glm::mat3(model);
-        normal_matrix = glm::inverse(normal_matrix);
-        normal_matrix = glm::transpose(normal_matrix);
-        material_shader.set_mat3("normal_matrix", normal_matrix);
-        draw_basic_mesh(plane_mesh, material_shader, plane_mat);
-
-        backpack.render();
-
-        skybox_shader.use();
-        view = glm::mat4(glm::mat3(CameraViewMatrix(&state.player_camera)));
-        projection_mul_view = projection * view;
-        skybox_shader.set_mat4("projection_mul_view", projection_mul_view);
-        draw_skybox(skybox_mesh, skybox_shader, skybox_texture);
-
-        glfwSwapBuffers(state.window);
-        glfwPollEvents();
-    }
-
-    glfwTerminate();
-}
-#else
-
 GLuint LoadTexture(std::string filename)
 {
     GLuint texture_id;
@@ -312,15 +139,96 @@ GLuint LoadTexture(std::string filename)
     return(texture_id);
 }
 
-void GameRun()
+GLuint LoadCubemap(std::string *face_names, u32 face_count) {
+    GLuint texture_id;
+    glGenTextures(1, &texture_id);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texture_id);
+    i32 texture_width, texture_height, channel_count;
+    u8 *data;
+    for (u32 i = 0; i < face_count; i++) {
+        std::string path = ASSETS_FOLDER + face_names[i];
+        data = stbi_load(path.c_str(), &texture_width, &texture_height, &channel_count, 0);
+        glTexImage2D(
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+            0, GL_RGB, texture_width, texture_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    stbi_image_free(data);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    return(texture_id);
+}
+
+int main(void)
 {
+    glfwInit();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    GLFWwindow *window = glfwCreateWindow(window_width, window_height, "hello!", NULL, NULL);
+    if (window == NULL)
+    {
+        return(1);
+    }
+    glfwMakeContextCurrent(window);
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    {
+        return(1);
+    }
+    glViewport(0, 0, window_width, window_height);
+
+    glfwSwapInterval(1);
+    glfwSetFramebufferSizeCallback(window, ResizeCallback);
+    glfwSetCursorPosCallback(window, MouseCallback);
+    glfwSetScrollCallback(window, ScrollCallback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+    glEnable(GL_DEPTH_TEST);
+
+    state.is_running = true;
+    state.window_width = window_width;
+    state.window_height = window_height;
+    state.last_time = 0.0f;
+    state.delta_time = 0.0f;
+    state.window = window;
+    state.player_camera = DefaultCamera();
+    mouse_last_movement = Vec2(state.window_width / 2.0f, state.window_height / 2.0f);
+
     ShaderProgram object_shader = ShaderProgram("src/shaders/rtr/vs.glsl", "src/shaders/rtr/fs.glsl");
     ShaderProgram light_shader = ShaderProgram("src/shaders/rtr/lighting.vs.glsl", "src/shaders/rtr/lighting.fs.glsl");
+    ShaderProgram skybox_shader("src/shaders/rtr/skybox_vs.glsl", "src/shaders/rtr/skybox_fs.glsl");
 
+    std::string cubemap_faces[] =
+    {
+        "skybox/right.jpg",
+        "skybox/left.jpg",
+        "skybox/top.jpg",
+        "skybox/bottom.jpg",
+        "skybox/front.jpg",
+        "skybox/back.jpg",
+    };
+
+    GLuint skybox_cubemap = LoadCubemap(cubemap_faces, ArrayCount(cubemap_faces));
     GLuint black_texture = LoadTexture(TEXTURE_DEFAULT_BLACK);
     GLuint cube_diffuse = LoadTexture("container2.png");
     GLuint cube_specular = LoadTexture("container2_s.png");
     GLuint wood_diffuse = LoadTexture("wood.png");
+
+    GLuint skybox_vao, skybox_vbo;
+    glGenVertexArrays(1, &skybox_vao);
+    glGenBuffers(1, &skybox_vbo);
+    glBindVertexArray(skybox_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, skybox_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(SKYBOX_VERTICES), &SKYBOX_VERTICES[0], GL_STATIC_DRAW);
+    GLsizei skybox_triangles_count = sizeof(SKYBOX_VERTICES) / (sizeof(f32) * 3); 
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32), (void *)0);
+    glBindVertexArray(0);
 
     GLuint cube_vao, cube_vbo;
     glGenVertexArrays(1, &cube_vao);
@@ -396,6 +304,7 @@ void GameRun()
         mat4x4 view = CameraViewMatrix(&state.player_camera);
         mat4x4 projection_mul_view = projection * view;
         
+        // TODO: add normal matrix to the shaders to fix normals on non-uniform transforms
         mat4x4 model = Identity();
         light_shader.use();
         light_shader.set_mat4("projection_mul_view", projection_mul_view);
@@ -413,7 +322,7 @@ void GameRun()
         object_shader.set_vec3("viewer_position", state.player_camera.position);
         object_shader.set_int("diffuse_texture", 0);
         object_shader.set_int("specular_texture", 1);
-        object_shader.set_float("shininess", 128.0f);
+        object_shader.set_float("shininess", 64.0f);
 
         object_shader.set_vec3("directional_light", Vec3(-0.2f, -1.0f, -0.3f));
         object_shader.set_int("light_count", point_light_count);
@@ -455,17 +364,24 @@ void GameRun()
             glBindVertexArray(0);
         }
 
+        skybox_shader.use();
+        view = Mat4x4(Mat3x3(CameraViewMatrix(&state.player_camera)));
+        projection_mul_view = projection * view;
+        skybox_shader.set_mat4("projection_mul_view", projection_mul_view);
+        glDepthFunc(GL_LEQUAL);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_cubemap);
+        skybox_shader.set_int("skybox_cubemap", 0);
+        glBindVertexArray(skybox_vao);
+        glDrawArrays(GL_TRIANGLES, 0, skybox_triangles_count);
+        glBindVertexArray(0);
+        glDepthFunc(GL_LESS);
+
         glBindTexture(GL_TEXTURE_2D, 0);
 
         glfwSwapBuffers(state.window);
         glfwPollEvents(); 
     }
-}
-#endif
-
-int main(void)
-{
-    GameInit();
-    GameRun();
+    glfwTerminate();
     return(0);
 }
