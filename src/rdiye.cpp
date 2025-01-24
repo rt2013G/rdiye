@@ -8,7 +8,6 @@
 #include "camera.h"
 
 #include "data.hpp"
-#include "lighting.hpp"
 #include "material.hpp"
 #include "model.hpp"
 #include "shader.hpp"
@@ -368,13 +367,15 @@ void GameRun()
     vec3 light_positions[MAX_LIGHTS] = {};
     light_positions[0] = Vec3(2.0f, 2.0f, -1.5f);
     light_positions[1] = Vec3(2.5f, 1.5f, -2.5f);
-    i32 point_light_count = 2;
-    vec3 light_color = Vec3(1.0f, 1.0f, 1.0f);
+    light_positions[2] = Vec3(-2.0f, 0.5f, -1.5f);
+    light_positions[3] = Vec3(3.0f, 1.5f, 2.5f);
+    light_positions[4] = Vec3(-1.0f, 1.0f, -2.0f);
+    i32 point_light_count = 5;
 
     vec3 transparent_cube_positions[4] =
     {
         Vec3(0.5f, 2.0f, 1.5f),
-        Vec3(-0.2f, -1.0f, -1.0f),
+        Vec3(-0.2f, 1.0f, -1.0f),
         Vec3(2.0f, 1.5f, 0.5f),
         Vec3(0.5f, 3.0f, -1.0f),
     };
@@ -395,29 +396,32 @@ void GameRun()
         mat4x4 view = CameraViewMatrix(&state.player_camera);
         mat4x4 projection_mul_view = projection * view;
         
-        mat4x4 model = Translation(light_positions[0]) * Scaling(0.05f);
+        mat4x4 model = Identity();
         light_shader.use();
-        light_shader.set_mat4("model", model);
         light_shader.set_mat4("projection_mul_view", projection_mul_view);
-        glBindVertexArray(light_vao);
-        glDrawArrays(GL_TRIANGLES, 0, light_triangles_count);
-
-        model = Translation(light_positions[1]) * Scaling(0.1f);
-        light_shader.set_mat4("model", model);
-        glBindVertexArray(light_vao);
-        glDrawArrays(GL_TRIANGLES, 0, light_triangles_count);
+        for(i32 i = 0; i < point_light_count; i++)
+        {
+            model = Translation(light_positions[i]) * Scaling(0.1f);
+            light_shader.set_mat4("model", model);
+            glBindVertexArray(light_vao);
+            glDrawArrays(GL_TRIANGLES, 0, light_triangles_count);
+        }
         glBindVertexArray(0);
         
         object_shader.use();
         object_shader.set_mat4("projection_mul_view", projection_mul_view);
         object_shader.set_vec3("viewer_position", state.player_camera.position);
-        object_shader.set_vec3("lights[0].position", light_positions[0]);
-        object_shader.set_vec3("lights[1].position", light_positions[1]);
-        object_shader.set_vec3("lights[0].color", light_color);
-        object_shader.set_vec3("lights[1].color", light_color);
-        object_shader.set_int("light_count", point_light_count);
         object_shader.set_int("diffuse_texture", 0);
         object_shader.set_int("specular_texture", 1);
+        object_shader.set_float("shininess", 128.0f);
+
+        object_shader.set_vec3("directional_light", Vec3(-0.2f, -1.0f, -0.3f));
+        object_shader.set_int("light_count", point_light_count);
+        for(i32 i = 0; i < point_light_count; i++)
+        {
+            std::string position_str = "lights[" + std::to_string(i) + "].position";
+            object_shader.set_vec3(position_str.c_str(), light_positions[i]);
+        }
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, wood_diffuse);
@@ -434,7 +438,7 @@ void GameRun()
         glBindTexture(GL_TEXTURE_2D, cube_diffuse);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, cube_specular);
-        vec3 cube_position = Vec3(1.0f, 0.0f, -3.0f);
+        vec3 cube_position = Vec3(1.0f, 1.0f, -3.0f);
         model = Translation(cube_position) * Scaling(0.5f);
         object_shader.set_mat4("model", model);
         glBindVertexArray(cube_vao);
