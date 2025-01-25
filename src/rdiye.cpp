@@ -22,8 +22,8 @@ struct game_state
     game_camera player_camera;
 };
 
-GLOBAL u16 window_width = 1920;
-GLOBAL u16 window_height = 1080;
+GLOBAL u16 default_window_width = 1920;
+GLOBAL u16 default_window_height = 1080;
 GLOBAL game_state state;
 GLOBAL bool has_mouse_moved = false;
 GLOBAL vec2 mouse_last_movement;
@@ -164,6 +164,108 @@ GLuint LoadCubemap(std::string *face_names, u32 face_count) {
     return(texture_id);
 }
 
+#define SHADOW_CASCADES_COUNT 3
+struct frustum
+{
+    vec4 corners[8];
+    vec3 center;
+};
+vec3 GetFrustumCenter(frustum f)
+{
+    vec3 center = Vec3(0.0f, 0.0f, 0.0f);
+    for(u32 i = 0; i < ArrayCount(f.corners); i++)
+    {
+        center += Vec3(f.corners[i]);
+    }
+    center /= ArrayCount(f.corners);
+
+    return(center);
+}
+
+frustum GetFrustumInWorldSpace(mat4x4 projection_mul_view)
+{
+    mat4x4 to_world_space = Inverse(projection_mul_view);
+
+    frustum f = {{
+        Vec4(-1.0f, -1.0f, -1.0f, 1.0f),
+        Vec4(-1.0f, -1.0f, 1.0f, 1.0f),
+        Vec4(-1.0f, 1.0f, -1.0f, 1.0f),
+        Vec4(-1.0f, 1.0f, 1.0f, 1.0f),
+        Vec4(1.0f, -1.0f, -1.0f, 1.0f),
+        Vec4(1.0f, -1.0f, 1.0f, 1.0f),
+        Vec4(1.0f, 1.0f, -1.0f, 1.0f),
+        Vec4(1.0f, 1.0f, 1.0f, 1.0f),
+    }};
+
+    for(u32 i = 0; i < ArrayCount(f.corners); i++)
+    {
+        f.corners[i] = to_world_space * f.corners[i];
+        f.corners[i] /= f.corners[i].w;
+    }
+
+    f.center = GetFrustumCenter(f);
+
+    return(f);
+}
+
+frustum GetFrustumInWorldSpace(mat4x4 projection, mat4x4 view)
+{
+    mat4x4 projection_mul_view = projection * view;
+    frustum result = GetFrustumInWorldSpace(projection_mul_view);
+
+    return(result);
+}
+
+// NOTE: gets the light space matrix for one cascade
+mat4x4 GetLightSpaceMatrix(vec3 light_direction, u16 width, u16 height, f32 near_plane, f32 far_plane)
+{
+    mat4x4 projection = Perspective(state.player_camera.settings.FOV, width / height, near_plane, far_plane);
+    mat4x4 view = CameraViewMatrix(&state.player_camera);
+    frustum f = GetFrustumInWorldSpace(projection, view);
+
+    mat4x4 light_view = LookAt(f.center + light_direction, f.center, Vec3(0.0f, 1.0f, 0.0f));
+    f32 min_x = FLT_MAX;
+    f32 min_y = FLT_MAX;
+    f32 min_z = FLT_MAX;
+    f32 max_x = FLT_MIN;
+    f32 max_y = FLT_MIN;
+    f32 max_z = FLT_MIN;
+
+    for(u32 i = 0; i < ArrayCount(f.corners); i++)
+    {
+        vec4 light_space_corner = light_view * f.corners[i];
+        min_x = Minimum(min_x, light_space_corner.x);
+        min_y = Minimum(min_y, light_space_corner.y);
+        min_z = Minimum(min_z, light_space_corner.z);
+        max_x = Maximum(max_x, light_space_corner.x);
+        max_y = Maximum(max_y, light_space_corner.y);
+        max_z = Maximum(max_z, light_space_corner.z);
+    }
+    rect3 frustum_rect = Rect3(min_x, min_y, min_z, max_x, max_y, max_z);
+
+    f32 frustum_distance_multiplier = 10.0f;
+    if(frustum_rect.min.z < 0)
+    {
+        frustum_rect.min.z *= frustum_distance_multiplier;
+    }
+    else
+    {
+        frustum_rect.min.z /= frustum_distance_multiplier; 
+    }
+    if(frustum_rect.max.z < 0)
+    {
+        frustum_rect.max.z /= frustum_distance_multiplier;
+    }
+    else
+    {
+        frustum_rect.max.z *= frustum_distance_multiplier; 
+    }
+    mat4x4 light_projection = Orthographic(frustum_rect);
+    mat4x4 result = light_projection * light_view;
+
+    return(result);
+}
+
 int main(void)
 {
     glfwInit();
@@ -171,7 +273,7 @@ int main(void)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow *window = glfwCreateWindow(window_width, window_height, "hello!", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(default_window_width, default_window_height, "hello!", NULL, NULL);
     if (window == NULL)
     {
         return(1);
@@ -181,7 +283,7 @@ int main(void)
     {
         return(1);
     }
-    glViewport(0, 0, window_width, window_height);
+    glViewport(0, 0, default_window_width, default_window_height);
 
     glfwSwapInterval(1);
     glfwSetFramebufferSizeCallback(window, ResizeCallback);
@@ -191,8 +293,8 @@ int main(void)
     glEnable(GL_DEPTH_TEST);
 
     state.is_running = true;
-    state.window_width = window_width;
-    state.window_height = window_height;
+    state.window_width = default_window_width;
+    state.window_height = default_window_height;
     state.last_time = 0.0f;
     state.delta_time = 0.0f;
     state.window = window;
@@ -202,6 +304,8 @@ int main(void)
     ShaderProgram object_shader = ShaderProgram("src/shaders/rtr/vs.glsl", "src/shaders/rtr/fs.glsl");
     ShaderProgram light_shader = ShaderProgram("src/shaders/rtr/lighting.vs.glsl", "src/shaders/rtr/lighting.fs.glsl");
     ShaderProgram skybox_shader("src/shaders/rtr/skybox_vs.glsl", "src/shaders/rtr/skybox_fs.glsl");
+    ShaderProgram shadow_shader("src/shaders/rtr/shadow_map.vs.glsl", "src/shaders/rtr/shadow_map.fs.glsl", 
+                                "src/shaders/rtr/shadow_map.gs.glsl");
 
     std::string cubemap_faces[] =
     {
@@ -279,6 +383,7 @@ int main(void)
     light_positions[3] = Vec3(3.0f, 1.5f, 2.5f);
     light_positions[4] = Vec3(-1.0f, 1.0f, -2.0f);
     i32 point_light_count = 5;
+    vec3 directional_light = Vec3(-0.2f, -1.0f, -0.3f);
 
     vec3 transparent_cube_positions[4] =
     {
@@ -288,7 +393,45 @@ int main(void)
         Vec3(0.5f, 3.0f, -1.0f),
     };
     f32 transparent_cube_size = 0.8f;
+
+    u32 depth_map_resolution = 4096;
+    GLuint light_fbo, light_depth_maps;
+    glGenFramebuffers(1, &light_fbo);
+    glGenTextures(1, &light_depth_maps);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT32F,
+                    depth_map_resolution, depth_map_resolution, SHADOW_CASCADES_COUNT, 
+                    0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    f32 border_color[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    glTextureParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, border_color);
     
+    glBindFramebuffer(GL_FRAMEBUFFER, light_fbo);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, light_depth_maps, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        Assert("framebuffer incomplete");
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    GLuint matrices_ubo;
+    glGenBuffers(1, &matrices_ubo);
+    glBindBuffer(GL_UNIFORM_BUFFER, matrices_ubo);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(mat4x4) * SHADOW_CASCADES_COUNT, NULL, GL_STATIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, matrices_ubo);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    f32 near_plane = state.player_camera.settings.near_plane;
+    f32 far_plane = state.player_camera.settings.far_plane;
+    f32 shadow_cascades_ratio = pow(far_plane / near_plane, 1.0f / SHADOW_CASCADES_COUNT);
+    f32 near_plane_cascades[3] = {near_plane, near_plane * shadow_cascades_ratio, near_plane * shadow_cascades_ratio * shadow_cascades_ratio};
+    f32 far_plane_cascades[3] = {far_plane, far_plane * shadow_cascades_ratio, far_plane * shadow_cascades_ratio * shadow_cascades_ratio};
+
     while(state.is_running)
     {
         f32 current_time = glfwGetTime();
@@ -300,12 +443,57 @@ int main(void)
         glClearColor(0.2, 0.2, 0.2, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        mat4x4 light_spaces_matrices[3] =
+        {
+            GetLightSpaceMatrix(directional_light, state.window_width, state.window_height, 
+                                near_plane_cascades[0], far_plane_cascades[0]),
+            GetLightSpaceMatrix(directional_light, state.window_width, state.window_height, 
+                                near_plane_cascades[1], far_plane_cascades[1]),
+            GetLightSpaceMatrix(directional_light, state.window_width, state.window_height, 
+                                near_plane_cascades[2], far_plane_cascades[2]),
+        };
+        glBindBuffer(GL_UNIFORM_BUFFER, matrices_ubo);
+        for (u32 i = 0; i < ArrayCount(light_spaces_matrices); i++)
+        {
+            glBufferSubData(GL_UNIFORM_BUFFER, sizeof(mat4x4) * i, sizeof(mat4x4), &light_spaces_matrices[i]);
+        }
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+        shadow_shader.use();
+        glBindFramebuffer(GL_FRAMEBUFFER, light_fbo);
+        glFramebufferTexture(GL_FRAMEBUFFER, GL_TEXTURE_2D_ARRAY, light_depth_maps, 0);
+        glViewport(0, 0, depth_map_resolution, depth_map_resolution);
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glCullFace(GL_FRONT);
+        
+        vec3 cube_position = Vec3(1.0f, 1.0f, -3.0f);
+        mat4x4 model = Translation(cube_position) * Scaling(0.5f);
+        object_shader.set_mat4("model", model);
+        glBindVertexArray(cube_vao);
+        glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
+        glBindVertexArray(0);
+
+        for(u32 i = 0; i < ArrayCount(transparent_cube_positions); i++)
+        {
+            cube_position = transparent_cube_positions[i];
+            model = Translation(cube_position) * Scaling(transparent_cube_size);
+            object_shader.set_mat4("model", model);
+            glBindVertexArray(cube_vao);
+            glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
+            glBindVertexArray(0);
+        }
+
+        glCullFace(GL_BACK);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, state.window_width, state.window_height);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    
         mat4x4 projection = PerspectiveProjection(&state.player_camera, state.window_width, state.window_height);
         mat4x4 view = CameraViewMatrix(&state.player_camera);
         mat4x4 projection_mul_view = projection * view;
-        
+
         // TODO: add normal matrix to the shaders to fix normals on non-uniform transforms
-        mat4x4 model = Identity();
+        model = Identity();
         light_shader.use();
         light_shader.set_mat4("projection_mul_view", projection_mul_view);
         for(i32 i = 0; i < point_light_count; i++)
@@ -319,23 +507,32 @@ int main(void)
         
         object_shader.use();
         object_shader.set_mat4("projection_mul_view", projection_mul_view);
+        object_shader.set_mat4("view", view);
         object_shader.set_vec3("viewer_position", state.player_camera.position);
         object_shader.set_int("diffuse_texture", 0);
         object_shader.set_int("specular_texture", 1);
         object_shader.set_float("shininess", 64.0f);
-
-        object_shader.set_vec3("directional_light", Vec3(-0.2f, -1.0f, -0.3f));
+        object_shader.set_vec3("directional_light", directional_light);
         object_shader.set_int("light_count", point_light_count);
         for(i32 i = 0; i < point_light_count; i++)
         {
             std::string position_str = "lights[" + std::to_string(i) + "].position";
             object_shader.set_vec3(position_str.c_str(), light_positions[i]);
         }
+        object_shader.set_int("shadow_map", 2);
+        object_shader.set_float("near_plane_cascades[0]", near_plane_cascades[0]);
+        object_shader.set_float("near_plane_cascades[1]", near_plane_cascades[1]);
+        object_shader.set_float("near_plane_cascades[2]", near_plane_cascades[2]);
+        object_shader.set_float("far_plane_cascades[0]", far_plane_cascades[0]);
+        object_shader.set_float("far_plane_cascades[1]", far_plane_cascades[1]);
+        object_shader.set_float("far_plane_cascades[2]", far_plane_cascades[2]);
 
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, wood_diffuse);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, black_texture);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
         vec3 plane_position = Vec3(0.0f, 0.0f, 0.0f);
         model = Translation(plane_position);
         object_shader.set_mat4("model", model);
@@ -347,7 +544,7 @@ int main(void)
         glBindTexture(GL_TEXTURE_2D, cube_diffuse);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, cube_specular);
-        vec3 cube_position = Vec3(1.0f, 1.0f, -3.0f);
+        cube_position = Vec3(1.0f, 1.0f, -3.0f);
         model = Translation(cube_position) * Scaling(0.5f);
         object_shader.set_mat4("model", model);
         glBindVertexArray(cube_vao);

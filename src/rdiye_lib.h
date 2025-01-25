@@ -1,6 +1,7 @@
 #ifndef RDIYE_LIB_H
 #define RDIYE_LIB_H
 
+#include "float.h"
 #include "math.h"
 
 #define INTERNAL static
@@ -202,6 +203,13 @@ inline vec4 Vec4(vec3 xyz, f32 w)
     result.y = xyz.y;
     result.z = xyz.z;
     result.w = w;
+
+    return(result);
+}
+
+inline vec3 Vec3(vec4 v4)
+{
+    vec3 result = Vec3(v4.x, v4.y, v4.z);
 
     return(result);
 }
@@ -438,6 +446,24 @@ inline f32 DotProduct(vec4 a, vec4 b)
     return(result);
 }
 
+inline vec4 operator/(vec4 a, f32 b)
+{
+    vec4 result;
+    result.x = a.x / b;
+    result.y = a.y / b;
+    result.z = a.z / b;
+    result.w = a.w / b;
+
+    return(result);
+}
+
+inline vec4 &operator/=(vec4 &a, f32 b)
+{
+    a = a / b;
+
+    return(a);
+}
+
 struct rect3
 {
     vec3 min;
@@ -450,6 +476,16 @@ inline rect3 Rect3(vec3 min, vec3 max)
 
     result.min = min;
     result.max = max;
+
+    return(result);
+}
+
+inline rect3 Rect3(f32 min_x, f32 min_y, f32 min_z, f32 max_x, f32 max_y, f32 max_z)
+{
+    rect3 result;
+
+    result.min = Vec3(min_x, min_y, min_z);
+    result.max = Vec3(max_x, max_y, max_z);
 
     return(result);
 }
@@ -523,9 +559,9 @@ inline mat4x4 operator*(mat4x4 A, mat4x4 B)
     return(C);
 }
 
-inline vec3 operator*(mat4x4 A, vec4 b)
+inline vec4 operator*(mat4x4 A, vec4 b)
 {
-    vec3 result = {};
+    vec4 result = {};
     for(i32 i = 0; i < 4; i++)
     {
         result.e[i] = DotProduct(Vec4(A.e[i][0], A.e[i][1], A.e[i][2], A.e[i][3]), b);
@@ -536,8 +572,9 @@ inline vec3 operator*(mat4x4 A, vec4 b)
 
 inline vec3 operator*(mat4x4 A, vec3 b)
 {
-    vec4 c = Vec4(b, 1);
-    vec3 result = A * c;
+    vec4 c = Vec4(b, 1.0f);
+    vec4 temp = A * c;
+    vec3 result = Vec3(temp.x, temp.y, temp.z);
     
     return(result);
 }
@@ -713,6 +750,116 @@ mat4x4 LookAt(vec3 eye_position, vec3 target, vec3 camera_up)
     }};
 
     return(result);
+}
+
+mat4x4 Inverse(mat4x4 A)
+{
+    f32 t0 = A.e[2][2] * A.e[3][3];
+    f32 t1 = A.e[3][2] * A.e[2][3];
+    f32 t2 = A.e[1][2] * A.e[3][3];
+    f32 t3 = A.e[3][2] * A.e[1][3];
+    f32 t4 = A.e[1][2] * A.e[2][3];
+    f32 t5 = A.e[2][2] * A.e[1][3];
+    f32 t6 = A.e[0][2] * A.e[3][3];
+    f32 t7 = A.e[3][2] * A.e[0][3];
+    f32 t8 = A.e[0][2] * A.e[2][3];
+    f32 t9 = A.e[2][2] * A.e[0][3];
+    f32 t10 = A.e[0][2] * A.e[1][3];
+    f32 t11 = A.e[1][2] * A.e[0][3];
+    f32 t12 = A.e[2][0] * A.e[3][1];
+    f32 t13 = A.e[3][0] * A.e[2][1];
+    f32 t14 = A.e[1][0] * A.e[3][1];
+    f32 t15 = A.e[3][0] * A.e[1][1];
+    f32 t16 = A.e[1][0] * A.e[2][1];
+    f32 t17 = A.e[2][0] * A.e[1][1];
+    f32 t18 = A.e[0][0] * A.e[3][1];
+    f32 t19 = A.e[3][0] * A.e[0][1];
+    f32 t20 = A.e[0][0] * A.e[2][1];
+    f32 t21 = A.e[2][0] * A.e[0][1];
+    f32 t22 = A.e[0][0] * A.e[1][1];
+    f32 t23 = A.e[1][0] * A.e[0][1];
+
+    mat4x4 result;
+
+    result.e[0][0] = (t0 * A.e[1][1] + t3 * A.e[2][1] + t4 * A.e[3][1]) -
+           (t1 * A.e[1][1] + t2 * A.e[2][1] + t5 * A.e[3][1]);
+    result.e[0][1] = (t1 * A.e[0][1] + t6 * A.e[2][1] + t9 * A.e[3][1]) -
+           (t0 * A.e[0][1] + t7 * A.e[2][1] + t8 * A.e[3][1]);
+    result.e[0][2] = (t2 * A.e[0][1] + t7 * A.e[1][1] + t10 * A.e[3][1]) -
+           (t3 * A.e[0][1] + t6 * A.e[1][1] + t11 * A.e[3][1]);
+    result.e[0][3] = (t5 * A.e[0][1] + t8 * A.e[1][1] + t11 * A.e[2][1]) -
+           (t4 * A.e[0][1] + t9 * A.e[1][1] + t10 * A.e[2][1]);
+
+    f32 d = 1.0f / (A.e[0][0] * result.e[0][0] + A.e[1][0] * result.e[0][1] + A.e[2][0] * result.e[0][2] + A.e[3][0] * result.e[0][3]);
+
+    Assert(d > 1e-4);
+
+    result.e[0][0] = d * result.e[0][0];
+    result.e[0][1] = d * result.e[0][1];
+    result.e[0][2] = d * result.e[0][2];
+    result.e[0][3] = d * result.e[0][3];
+    result.e[1][0] = d * ((t1 * A.e[1][0] + t2 * A.e[2][0] + t5 * A.e[3][0]) -
+                (t0 * A.e[1][0] + t3 * A.e[2][0] + t4 * A.e[3][0]));
+    result.e[1][1] = d * ((t0 * A.e[0][0] + t7 * A.e[2][0] + t8 * A.e[3][0]) -
+                (t1 * A.e[0][0] + t6 * A.e[2][0] + t9 * A.e[3][0]));
+    result.e[1][2] = d * ((t3 * A.e[0][0] + t6 * A.e[1][0] + t11 * A.e[3][0]) -
+                (t2 * A.e[0][0] + t7 * A.e[1][0] + t10 * A.e[3][0]));
+    result.e[1][3] = d * ((t4 * A.e[0][0] + t9 * A.e[1][0] + t10 * A.e[2][0]) -
+                (t5 * A.e[0][0] + t8 * A.e[1][0] + t11 * A.e[2][0]));
+    result.e[2][0] = d * ((t12 * A.e[1][3] + t15 * A.e[2][3] + t16 * A.e[3][3]) -
+                (t13 * A.e[1][3] + t14 * A.e[2][3] + t17 * A.e[3][3]));
+    result.e[2][1] = d * ((t13 * A.e[0][3] + t18 * A.e[2][3] + t21 * A.e[3][3]) -
+                (t12 * A.e[0][3] + t19 * A.e[2][3] + t20 * A.e[3][3]));
+    result.e[2][2] = d * ((t14 * A.e[0][3] + t19 * A.e[1][3] + t22 * A.e[3][3]) -
+                 (t15 * A.e[0][3] + t18 * A.e[1][3] + t23 * A.e[3][3]));
+    result.e[2][3] = d * ((t17 * A.e[0][3] + t20 * A.e[1][3] + t23 * A.e[2][3]) -
+                 (t16 * A.e[0][3] + t21 * A.e[1][3] + t22 * A.e[2][3]));
+    result.e[3][0] = d * ((t14 * A.e[2][2] + t17 * A.e[3][2] + t13 * A.e[1][2]) -
+                 (t16 * A.e[3][2] + t12 * A.e[1][2] + t15 * A.e[2][2]));
+    result.e[3][1] = d * ((t20 * A.e[3][2] + t12 * A.e[0][2] + t19 * A.e[2][2]) -
+                 (t18 * A.e[2][2] + t21 * A.e[3][2] + t13 * A.e[0][2]));
+    result.e[3][2] = d * ((t18 * A.e[1][2] + t23 * A.e[3][2] + t15 * A.e[0][2]) -
+                 (t22 * A.e[3][2] + t14 * A.e[0][2] + t19 * A.e[1][2]));
+    result.e[3][3] = d * ((t22 * A.e[2][2] + t16 * A.e[0][2] + t21 * A.e[1][2]) -
+                 (t20 * A.e[1][2] + t23 * A.e[2][2] + t17 * A.e[0][2]));
+
+    return(result);
+}
+
+vec3 GetRectangleCenter(vec3 min_corner, vec3 max_corner)
+{
+    f32 x = (min_corner.x + max_corner.x) / 2.0f;
+    f32 y = (min_corner.y + max_corner.y) / 2.0f;
+    f32 z = (min_corner.z + max_corner.z) / 2.0f;
+    vec3 result = Vec3(x, y, z);
+
+    return(result);
+}
+
+vec3 GetRectangleCenter(rect3 rect)
+{
+    vec3 result = GetRectangleCenter(rect.min, rect.max);
+
+    return(result);
+}
+
+#include "stdio.h"
+
+void PrintMatrix(mat4x4 A)
+{
+    for(i32 i = 0; i < 4; i++)
+    {
+        for(i32 j = 0; j < 4; j++)
+        {
+            printf("%f ", A.e[i][j]);
+        }
+        printf("\n");
+    }
+}
+
+void PrintString(const char *str)
+{
+    printf("%s\n", str);
 }
 
 #endif

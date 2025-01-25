@@ -13,6 +13,7 @@ in vs_out
     vec2 tex_coords;
 } vertex_output;
 
+uniform mat4 view;
 uniform vec3 viewer_position;
 uniform vec3 directional_light;
 uniform point_light lights[MAX_LIGHTS];
@@ -21,7 +22,71 @@ uniform sampler2D diffuse_texture;
 uniform sampler2D specular_texture;
 uniform float shininess;
 
+#define CASCADE_COUNT 2
+uniform float near_plane_cascades[3];
+uniform float far_plane_cascades[3];
+uniform sampler2DArray shadow_map;
+
+layout (std140) uniform light_space_matrices_ubo
+{
+    mat4 light_space_matrices[CASCADE_COUNT];
+};
+
 out vec4 frag_color;
+
+float CalculateShadow(vec3 world_position)
+{
+    vec4 view_position = view * vec4(world_position, 1.0f);
+    float depth_value = abs(view_position.z);
+
+    int layer = -1;
+    for(int i = 0; i < CASCADE_COUNT; i++)
+    {
+        if(depth_value > near_plane_cascades[i] && depth_value < far_plane_cascades[i])
+        {
+            layer = i;
+            break;
+        }
+    }
+    if(layer == -1)
+    {
+        layer = CASCADE_COUNT;
+    }
+
+    vec4 fragment_position_light_space = light_space_matrices[layer] * vec4(world_position, 1.0f);
+    vec3 projected_coords = fragment_position_light_space.xyz / fragment_position_light_space.w;
+    projected_coords = projected_coords * 0.5f + 0.5f;
+    float current_depth = projected_coords.z;
+    if(current_depth > 1.0f)
+    {
+        return 0.0f;
+    }
+
+    vec3 normal = normalize(vertex_output.normal);
+    float bias = max(0.05f * (1.0f - dot(normal, directional_light)), 0.005f);
+    if(layer == CASCADE_COUNT)
+    {
+        bias *= 1.0f / (far_plane_cascades[layer] * 0.5f);
+    }
+    else
+    {
+        bias *= 1.0f / ((far_plane_cascades[layer] - near_plane_cascades[layer]) * 0.5f);
+    }
+
+    float shadow = 0.0f;
+    vec2 texel_size = 1.0f / vec2(textureSize(shadow_map, 0));
+    for(int x = -1; x <= 1; x++)
+    {
+        for(int y = -1; y <= 1; y++)
+        {
+            float pcf_depth = texture(shadow_map, vec3(projected_coords.xy + vec2(x, y) * texel_size, layer)).r;
+            shadow += (current_depth - bias) > pcf_depth ? 1.0f : 0.0f;
+        }
+    }
+    shadow /= 9.0f;
+
+    return(shadow);
+}
 
 vec3 DirectionalLightContribution(vec3 direction, vec3 normal, vec3 view_direction)
 {
@@ -38,9 +103,11 @@ vec3 DirectionalLightContribution(vec3 direction, vec3 normal, vec3 view_directi
     vec3 diffuse_light = vec3(0.4f, 0.4f, 0.4f);
     vec3 specular_light = vec3(0.5f, 0.5f, 0.5f);
 
+    float shadow = CalculateShadow(vertex_output.fragment_position);
+
     vec3 result = (ambient_light * sampled_diffuse) +
-                  (diffuse_light * sampled_diffuse * diffuse_strength) +
-                  (specular_light * sampled_specular * specular_strength);
+                  ((diffuse_light * sampled_diffuse * diffuse_strength) +
+                  (specular_light * sampled_specular * specular_strength)) * (1.0f - shadow);
     return(result);
 }
 
