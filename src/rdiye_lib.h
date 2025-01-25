@@ -207,6 +207,18 @@ inline vec4 Vec4(vec3 xyz, f32 w)
     return(result);
 }
 
+inline vec4 Vec4(f32 value)
+{
+    vec4 result;
+
+    result.x = value;
+    result.y = value;
+    result.z = value;
+    result.w = value;
+
+    return(result);
+}
+
 inline vec3 Vec3(vec4 v4)
 {
     vec3 result = Vec3(v4.x, v4.y, v4.z);
@@ -690,6 +702,7 @@ mat4x4 Shear(i32 i, i32 j, f32 s)
     return(result); 
 }
 
+#if 1
 mat4x4 Orthographic(f32 left, f32 bottom, f32 near_plane, f32 right, f32 top, f32 far_plane)
 {
     // NOTE: we are looking at the negative z axis so technically we should have near_plane > far_plane
@@ -708,6 +721,25 @@ mat4x4 Orthographic(f32 left, f32 bottom, f32 near_plane, f32 right, f32 top, f3
 
     return(result); 
 }
+#else
+mat4x4 Orthographic(f32 left, f32 bottom, f32 near_plane, f32 right, f32 top, f32 far_plane)
+{
+    mat4x4 result = Identity();
+
+    f32 lr = 1.0f / (left - right);
+    f32 bt = 1.0f / (bottom - top);
+    f32 nf = 1.0f / (near_plane - far_plane);
+
+    result.e[0][0] = -2.0f * lr;
+    result.e[1][1] = -2.0f * bt;
+    result.e[2][2] = 2.0f * nf;
+    result.e[0][3] = (left + right) * lr;
+    result.e[1][3] = (top + bottom) * bt;
+    result.e[2][3] = (far_plane + near_plane) * nf;
+
+    return(result); 
+}
+#endif
 
 mat4x4 Orthographic(vec3 min_corner, vec3 max_corner)
 {
@@ -752,6 +784,18 @@ mat4x4 LookAt(vec3 eye_position, vec3 target, vec3 camera_up)
     return(result);
 }
 
+mat4x4 Transpose(mat4x4 A)
+{
+    mat4x4 result = {{
+        {A.e[0][0], A.e[1][0], A.e[2][0], A.e[3][0]},
+        {A.e[0][1], A.e[1][1], A.e[2][1], A.e[3][1]},
+        {A.e[0][2], A.e[1][2], A.e[2][2], A.e[3][2]},
+        {A.e[0][3], A.e[1][3], A.e[2][3], A.e[3][3]},
+    }};
+
+    return(result);
+}
+
 mat4x4 Inverse(mat4x4 A)
 {
     f32 t0 = A.e[2][2] * A.e[3][3];
@@ -791,8 +835,6 @@ mat4x4 Inverse(mat4x4 A)
            (t4 * A.e[0][1] + t9 * A.e[1][1] + t10 * A.e[2][1]);
 
     f32 d = 1.0f / (A.e[0][0] * result.e[0][0] + A.e[1][0] * result.e[0][1] + A.e[2][0] * result.e[0][2] + A.e[3][0] * result.e[0][3]);
-
-    Assert(d > 1e-4);
 
     result.e[0][0] = d * result.e[0][0];
     result.e[0][1] = d * result.e[0][1];
@@ -860,6 +902,16 @@ void PrintMatrix(mat4x4 A)
 void PrintString(const char *str)
 {
     printf("%s\n", str);
+}
+
+void PrintFloat(f32 f)
+{
+   printf("%f\n", f); 
+}
+
+void PrintVec(vec3 vec)
+{
+    printf("%f %f %f\n", vec.x, vec.y, vec.z);
 }
 
 #endif

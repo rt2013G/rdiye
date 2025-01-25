@@ -22,9 +22,9 @@ uniform sampler2D diffuse_texture;
 uniform sampler2D specular_texture;
 uniform float shininess;
 
-#define CASCADE_COUNT 2
-uniform float near_plane_cascades[3];
-uniform float far_plane_cascades[3];
+#define CASCADE_COUNT 3
+uniform float near_plane_cascades[CASCADE_COUNT];
+uniform float far_plane_cascades[CASCADE_COUNT];
 uniform sampler2DArray shadow_map;
 
 layout (std140) uniform light_space_matrices_ubo
@@ -39,22 +39,21 @@ float CalculateShadow(vec3 world_position)
     vec4 view_position = view * vec4(world_position, 1.0f);
     float depth_value = abs(view_position.z);
 
-    int layer = -1;
+    int layer = CASCADE_COUNT;
     for(int i = 0; i < CASCADE_COUNT; i++)
     {
-        if(depth_value > near_plane_cascades[i] && depth_value < far_plane_cascades[i])
+        if(depth_value < far_plane_cascades[i])
         {
             layer = i;
             break;
         }
     }
-    if(layer == -1)
+    if(layer == CASCADE_COUNT)
     {
-        layer = CASCADE_COUNT;
+        layer = CASCADE_COUNT - 1;
     }
-
-    vec4 fragment_position_light_space = light_space_matrices[layer] * vec4(world_position, 1.0f);
-    vec3 projected_coords = fragment_position_light_space.xyz / fragment_position_light_space.w;
+    vec4 light_space_pos = light_space_matrices[layer] * vec4(world_position, 1.0f);
+    vec3 projected_coords = light_space_pos.xyz / light_space_pos.w;
     projected_coords = projected_coords * 0.5f + 0.5f;
     float current_depth = projected_coords.z;
     if(current_depth > 1.0f)
@@ -64,7 +63,7 @@ float CalculateShadow(vec3 world_position)
 
     vec3 normal = normalize(vertex_output.normal);
     float bias = max(0.05f * (1.0f - dot(normal, directional_light)), 0.005f);
-    if(layer == CASCADE_COUNT)
+    if(layer == CASCADE_COUNT - 1)
     {
         bias *= 1.0f / (far_plane_cascades[layer] * 0.5f);
     }
@@ -141,7 +140,7 @@ void main()
     vec3 normal = normalize(vertex_output.normal);
     vec3 view_direction = normalize(viewer_position - vertex_output.fragment_position);
 
-    vec3 final_color = DirectionalLightContribution(directional_light, normal, view_direction);
+    vec3 final_color = DirectionalLightContribution(-directional_light, normal, view_direction);
     for(int i = 0; i < light_count; i++)
     {
         final_color += PointLightContribution(lights[i].position, normal, view_direction);
