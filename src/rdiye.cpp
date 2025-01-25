@@ -31,6 +31,8 @@ GLOBAL vec2 mouse_last_movement;
 #define SHADOW_CASCADES_COUNT 3
 GLOBAL i32 render_debug_quad_layer = SHADOW_CASCADES_COUNT;
 
+GLOBAL b32 camera_mode_ortho = false;
+
 void ResizeCallback(GLFWwindow *window, i32 width, i32 height)
 {
     glViewport(0, 0, width, height);
@@ -68,11 +70,25 @@ void ProcessInput(GLFWwindow *window)
     }
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
     {
-        MoveCamera(&state.player_camera, FORWARD, state.delta_time);
+        if(camera_mode_ortho)
+        {
+            MoveCamera(&state.player_camera, UP, state.delta_time); 
+        }
+        else
+        {
+            MoveCamera(&state.player_camera, FORWARD, state.delta_time);
+        }
     }
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
     {
-        MoveCamera(&state.player_camera, BACKWARD, state.delta_time);
+        if(camera_mode_ortho)
+        {
+            MoveCamera(&state.player_camera, DOWN, state.delta_time);
+        }
+        else
+        {
+            MoveCamera(&state.player_camera, BACKWARD, state.delta_time);
+        }
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
     {
@@ -108,6 +124,10 @@ void ProcessInput(GLFWwindow *window)
         {
             render_debug_quad_layer = SHADOW_CASCADES_COUNT;
         }
+    }
+    if(glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS)
+    {
+        camera_mode_ortho = !camera_mode_ortho;
     }
 }
 
@@ -455,12 +475,13 @@ int main(void)
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     // NOTE: the 0.5f is a value added to prevent the nearest cascade to have too high of a precision
-    // while leaving the farthest cascades with having to cover too large of an area
+    //       while leaving the farthest cascades with having to cover too large of an area
     f32 near_plane = state.player_camera.settings.near_plane + 0.5f;
     f32 far_plane = state.player_camera.settings.far_plane;
     f32 shadow_cascades_ratio = pow(far_plane / near_plane, 1.0f / SHADOW_CASCADES_COUNT);
     f32 near_plane_cascades[3] = {near_plane, near_plane * shadow_cascades_ratio, near_plane * shadow_cascades_ratio * shadow_cascades_ratio};
     f32 far_plane_cascades[3] = {near_plane * shadow_cascades_ratio, near_plane * shadow_cascades_ratio * shadow_cascades_ratio, far_plane};
+    near_plane -= 0.5f;
 
     GLuint quad_vao, quad_vbo;
     glGenVertexArrays(1, &quad_vao);
@@ -530,8 +551,8 @@ int main(void)
         }
 
         vec3 scene_center = Vec3(0.0f, 1.0f, 0.0f);
-        // TODO: fix the functions to rotate around a point
-        big_cube_model = big_cube_model * RotationP(RotationY(DegreesToRadians(1)), scene_center);
+        // TODO: fix the function to rotate around a point
+        big_cube_model = big_cube_model * RotationP(RotationY(DegreesToRadians(30) * state.delta_time), scene_center);
         model = big_cube_model * big_cube_scale;
         shadow_shader.set_mat4("model", model);
         glBindVertexArray(cube_vao);
@@ -543,8 +564,18 @@ int main(void)
         glViewport(0, 0, state.window_width, state.window_height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glDisable(GL_DEPTH_CLAMP);
-    
-        mat4x4 projection = PerspectiveProjection(&state.player_camera, state.window_width, state.window_height);
+
+        mat4x4 perspective_projection = PerspectiveProjection(&state.player_camera, state.window_width, state.window_height);
+        mat4x4 projection = perspective_projection;
+        // TODO: this is a temporary orthographic camera mode added for the funsies
+        //       check for a better way of implementing it
+        if(camera_mode_ortho)
+        {
+            f32 view_volume_scale = state.player_camera.settings.FOV / 3;
+            f32 aspect_ratio = state.window_width / state.window_height;
+            projection = Orthographic(-aspect_ratio * view_volume_scale, -view_volume_scale, -far_plane,
+                                      aspect_ratio * view_volume_scale, view_volume_scale, far_plane);
+        }
         mat4x4 view = CameraViewMatrix(&state.player_camera);
         mat4x4 projection_mul_view = projection * view;
 
@@ -618,7 +649,7 @@ int main(void)
 
         skybox_shader.use();
         view = Mat4x4(Mat3x3(CameraViewMatrix(&state.player_camera)));
-        projection_mul_view = projection * view;
+        projection_mul_view = perspective_projection * view;
         skybox_shader.set_mat4("projection_mul_view", projection_mul_view);
         glDepthFunc(GL_LEQUAL);
         glActiveTexture(GL_TEXTURE0);
@@ -646,7 +677,7 @@ int main(void)
         }
 
         glfwSwapBuffers(state.window);
-        glfwPollEvents(); 
+        glfwPollEvents();
     }
     glfwTerminate();
     return(0);

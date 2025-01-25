@@ -10,6 +10,8 @@ enum CameraDirection
     BACKWARD = 1,
     LEFT = 2,
     RIGHT = 3,
+    UP = 4,
+    DOWN = 5,
 };
 
 struct game_camera_settings
@@ -89,20 +91,34 @@ mat4x4 PerspectiveProjection(game_camera *camera, f32 window_width, f32 window_h
     return(result);
 }
 
-void MoveCamera(game_camera *camera, CameraDirection dir, f32 delta_time) {
+void MoveCamera(game_camera *camera, CameraDirection dir, f32 delta_time) 
+{
     f32 velocity = camera->settings.speed * delta_time;
-    switch (dir) {
-        case FORWARD: {
+    switch (dir) 
+    {
+        case FORWARD: 
+        {
             camera->position += camera->front * velocity;
         } break;
-        case BACKWARD: {
+        case BACKWARD: 
+        {
             camera->position -= camera->front * velocity;
         } break;
-        case LEFT: {
+        case LEFT: 
+        {
             camera->position -= camera->right * velocity;
         } break;
-        case RIGHT: {
+        case RIGHT: 
+        {
             camera->position += camera->right * velocity;
+        } break;
+        case UP: 
+        {
+            camera->position += camera->up * velocity;
+        } break;
+        case DOWN: 
+        {
+            camera->position -= camera->up * velocity;
         } break;
     }
 }
