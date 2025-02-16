@@ -13,12 +13,13 @@ out vs_out
 
 uniform mat4 model;
 uniform mat4 projection_mul_view;
+uniform mat3 normal_matrix;
 
 void main()
 {
     vec4 world_position = model * vec4(in_pos, 1.0f);
     vertex_output.fragment_position = world_position.xyz;
-    vertex_output.normal = (model * vec4(in_normal, 1.0f)).xyz;
+    vertex_output.normal = normal_matrix * in_normal;
     vertex_output.tex_coords = in_tex_coords;
     
     gl_Position = projection_mul_view * world_position;

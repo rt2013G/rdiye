@@ -17,6 +17,7 @@ struct ShaderProgram {
     void set_bool(const char *name, b32 value);
     void set_vec3(const char *name, vec3 vec);
     void set_mat4(const char *name, mat4x4 mat);
+    void set_mat3(const char *name, mat3x3 mat);
 };
 
 ShaderProgram::ShaderProgram(const char *vertex_shader_path, const char *fragment_shader_path, 
@@ -123,5 +124,11 @@ void ShaderProgram::set_mat4(const char *name, mat4x4 mat)
 {
     glUniformMatrix4fv(glGetUniformLocation(id, name), 1, GL_TRUE, &mat.e[0][0]);
 }
+
+void ShaderProgram::set_mat3(const char *name, mat3x3 mat)
+{
+    glUniformMatrix3fv(glGetUniformLocation(id, name), 1, GL_TRUE, &mat.e[0][0]);
+}
+
 
 #endif

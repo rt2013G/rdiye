@@ -342,7 +342,8 @@ int main(void)
     state.player_camera = DefaultCamera();
     mouse_last_movement = Vec2(state.window_width / 2.0f, state.window_height / 2.0f);
 
-    ShaderProgram object_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/fs.glsl");
+    //ShaderProgram phong_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/phong.fs.glsl");
+    ShaderProgram object_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/pbr.fs.glsl");
     ShaderProgram light_shader = ShaderProgram("src/shaders/lighting.vs.glsl", "src/shaders/lighting.fs.glsl");
     ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
     ShaderProgram shadow_shader("src/shaders/shadow_map.vs.glsl", "src/shaders/shadow_map.fs.glsl", 
@@ -361,9 +362,15 @@ int main(void)
 
     GLuint skybox_cubemap = LoadCubemap(cubemap_faces, ArrayCount(cubemap_faces));
     GLuint black_texture = LoadTexture(TEXTURE_DEFAULT_BLACK);
+    GLuint white_texture = LoadTexture(TEXTURE_DEFAULT_WHITE); 
+    GLuint default_normal_texture = LoadTexture(TEXTURE_DEFAULT_NORMAL_MAP);
     GLuint cube_diffuse = LoadTexture("container2.png");
     GLuint cube_specular = LoadTexture("container2_s.png");
     GLuint wood_diffuse = LoadTexture("wood.png");
+    GLuint iron_albedo = LoadTexture("rusted_iron/albedo.png");
+    GLuint iron_metallic = LoadTexture("rusted_iron/metallic.png");
+    GLuint iron_normal = LoadTexture("rusted_iron/normal.png");
+    GLuint iron_roughness = LoadTexture("rusted_iron/roughness.png");
 
     GLuint skybox_vao, skybox_vbo;
     glGenVertexArrays(1, &skybox_vao);
@@ -424,7 +431,8 @@ int main(void)
     light_positions[2] = Vec3(-2.0f, 0.5f, -1.5f);
     light_positions[3] = Vec3(3.0f, 1.5f, 2.5f);
     light_positions[4] = Vec3(-1.0f, 1.0f, -2.0f);
-    i32 point_light_count = 5;
+    light_positions[5] = Vec3(-5.0f, 10.0f, -5.0f);
+    i32 point_light_count = 6;
 
     // TODO: we're technically passing the directional light POSITION to the shaders
     //       rather than the direction, this is incorrect but it works if we assume
@@ -596,17 +604,22 @@ int main(void)
         object_shader.set_mat4("projection_mul_view", projection_mul_view);
         object_shader.set_mat4("view", view);
         object_shader.set_vec3("viewer_position", state.player_camera.position);
-        object_shader.set_int("diffuse_texture", 0);
-        object_shader.set_int("specular_texture", 1);
-        object_shader.set_float("shininess", 64.0f);
+        object_shader.set_int("albedo_map", 0);
+        object_shader.set_int("normal_map", 1);
+        object_shader.set_int("metallic_map", 2);
+        object_shader.set_int("roughness_map", 3);
+        object_shader.set_int("ambient_occlusion_map", 4);
+        // object_shader.set_float("shininess", 64.0f); // only used in the phong shader
         object_shader.set_vec3("directional_light", directional_light);
         object_shader.set_int("light_count", point_light_count);
         for(i32 i = 0; i < point_light_count; i++)
         {
             std::string position_str = "lights[" + std::to_string(i) + "].position";
+            std::string color_str = "lights[" + std::to_string(i) + "].color";
             object_shader.set_vec3(position_str.c_str(), light_positions[i]);
+            object_shader.set_vec3(color_str.c_str(), Vec3(150.0f, 150.0f, 150.0f));
         }
-        object_shader.set_int("shadow_map", 2);
+        object_shader.set_int("shadow_map", 5);
         object_shader.set_float("near_plane_cascades[0]", near_plane_cascades[0]);
         object_shader.set_float("near_plane_cascades[1]", near_plane_cascades[1]);
         object_shader.set_float("near_plane_cascades[2]", near_plane_cascades[2]);
@@ -614,25 +627,50 @@ int main(void)
         object_shader.set_float("far_plane_cascades[1]", far_plane_cascades[1]);
         object_shader.set_float("far_plane_cascades[2]", far_plane_cascades[2]);
 
+        // ALBEDO
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, wood_diffuse);
+        // NORMAL
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, black_texture);
+        glBindTexture(GL_TEXTURE_2D, default_normal_texture);
+        // METALLIC
         glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, black_texture);
+        // ROUGHNESS
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, black_texture);
+        // AO
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, white_texture);
+
+        glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
         plane_position = Vec3(0.0f);
         model = Translation(plane_position);
         object_shader.set_mat4("model", model);
+        object_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
         glBindVertexArray(plane_vao);
         glDrawArrays(GL_TRIANGLES, 0, plane_triangles_count);
         glBindVertexArray(0);
 
+        // ALBEDO
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, cube_diffuse);
+        glBindTexture(GL_TEXTURE_2D, iron_albedo);
+        // NORMAL
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, cube_specular);
+        glBindTexture(GL_TEXTURE_2D, iron_normal);
+        // METALLIC
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, iron_metallic);
+        // ROUGHNESS
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, iron_roughness);
+        // AO
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, white_texture);
         model = big_cube_model * big_cube_scale;
         object_shader.set_mat4("model", model);
+        object_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
         glBindVertexArray(cube_vao);
         glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
         glBindVertexArray(0);
@@ -642,6 +680,7 @@ int main(void)
             cube_position = transparent_cube_positions[i];
             model = Translation(cube_position) * Scaling(transparent_cube_size);
             object_shader.set_mat4("model", model);
+            object_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
             glBindVertexArray(cube_vao);
             glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
             glBindVertexArray(0);

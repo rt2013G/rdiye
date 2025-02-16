@@ -65,6 +65,7 @@ static_assert(sizeof(b32) == 4, "b32 size error");
 
 #define ASSETS_FOLDER "assets/"
 #define TEXTURE_DEFAULT_BLACK "TEXTURE_DEFAULT_BLACK.png"
+#define TEXTURE_DEFAULT_WHITE "TEXTURE_DEFAULT_WHITE.png"
 #define TEXTURE_DEFAULT_NORMAL_MAP "TEXTURE_DEFAULT_NORMAL_MAP.png"
 
 #define PI32 3.14159265359f
