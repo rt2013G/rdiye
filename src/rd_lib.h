@@ -686,6 +686,13 @@ mat4x4 Scaling(f32 x, f32 y, f32 z)
     return(result); 
 }
 
+mat4x4 Scaling(vec3 vec)
+{
+    mat4x4 result = Scaling(vec.x, vec.y, vec.z);
+    
+    return(result);
+}
+
 mat4x4 Scaling(f32 value)
 {
     mat4x4 result = Scaling(value, value, value);

@@ -1,8 +1,6 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
-#include "rdiye_lib.h"
-
 // TODO: remove this later
 enum CameraDirection 
 {

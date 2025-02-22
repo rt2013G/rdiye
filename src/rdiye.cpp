@@ -4,11 +4,10 @@
 
 #include "thirdparty/stb/stb_image.h"
 
-#include "rdiye_lib.h"
+#include "rd_lib.h"
 #include "camera.h"
-
-#include "data.hpp"
-#include "model.hpp"
+#include "rd_model.h"
+#include "temp_data.h"
 #include "shader.hpp"
 
 struct game_state
@@ -134,51 +133,6 @@ void ProcessInput(GLFWwindow *window)
 void ScrollCallback(GLFWwindow *window, f64 offset_x, f64 offset_y)
 {
     ProcessCameraScroll(&state.player_camera, (f32)offset_y);
-}
-
-GLuint LoadTexture(std::string filename)
-{
-    GLuint texture_id;
-    glGenTextures(1, &texture_id);
-    i32 texture_width, texture_height, channel_count;
-    stbi_set_flip_vertically_on_load(true);
-
-    std::string path = ASSETS_FOLDER + filename;
-    u8 *data = stbi_load(path.c_str(), &texture_width, &texture_height, &channel_count, 0);
-    if(data)
-    {
-        GLenum format;
-        if(channel_count == 1)
-        {
-            format = GL_RED;
-        }
-        else if(channel_count == 3)
-        {
-            format = GL_RGB;
-        }
-        else if(channel_count == 4)
-        {
-            format = GL_RGBA;
-        }
-        glBindTexture(GL_TEXTURE_2D, texture_id);
-        glTexImage2D(GL_TEXTURE_2D, 0, format, texture_width, texture_height, 
-                     0, format, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    else
-    {
-        Assert(!"failed to load texture");
-    }
-
-    stbi_image_free(data);
-    stbi_set_flip_vertically_on_load(false);
-
-    return(texture_id);
 }
 
 GLuint LoadCubemap(std::string *face_names, u32 face_count) {
@@ -364,13 +318,20 @@ int main(void)
     GLuint black_texture = LoadTexture(TEXTURE_DEFAULT_BLACK);
     GLuint white_texture = LoadTexture(TEXTURE_DEFAULT_WHITE); 
     GLuint default_normal_texture = LoadTexture(TEXTURE_DEFAULT_NORMAL_MAP);
-    GLuint cube_diffuse = LoadTexture("container2.png");
-    GLuint cube_specular = LoadTexture("container2_s.png");
+    // GLuint cube_diffuse = LoadTexture("container2.png");
+    // GLuint cube_specular = LoadTexture("container2_s.png");
     GLuint wood_diffuse = LoadTexture("wood.png");
-    GLuint iron_albedo = LoadTexture("rusted_iron/albedo.png");
-    GLuint iron_metallic = LoadTexture("rusted_iron/metallic.png");
-    GLuint iron_normal = LoadTexture("rusted_iron/normal.png");
-    GLuint iron_roughness = LoadTexture("rusted_iron/roughness.png");
+    pbr_texture_group wood_textures =
+    {
+        wood_diffuse, default_normal_texture,
+        black_texture, black_texture, white_texture,
+    };
+    pbr_texture_group rusted_iron_textures;
+    rusted_iron_textures.albedo = LoadTexture("rusted_iron/albedo.png");
+    rusted_iron_textures.normal = LoadTexture("rusted_iron/normal.png");
+    rusted_iron_textures.metallic = LoadTexture("rusted_iron/metallic.png");
+    rusted_iron_textures.roughness = LoadTexture("rusted_iron/roughness.png");
+    rusted_iron_textures.ao = white_texture;
 
     GLuint skybox_vao, skybox_vbo;
     glGenVertexArrays(1, &skybox_vao);
@@ -426,13 +387,17 @@ int main(void)
 
     #define MAX_LIGHTS 16
     vec3 light_positions[MAX_LIGHTS] = {};
-    light_positions[0] = Vec3(2.0f, 2.0f, -1.5f);
+    light_positions[0] = Vec3(-5.0f, 200.0f, -5.0f);
     light_positions[1] = Vec3(2.5f, 1.5f, -2.5f);
     light_positions[2] = Vec3(-2.0f, 0.5f, -1.5f);
     light_positions[3] = Vec3(3.0f, 1.5f, 2.5f);
     light_positions[4] = Vec3(-1.0f, 1.0f, -2.0f);
-    light_positions[5] = Vec3(-5.0f, 10.0f, -5.0f);
-    i32 point_light_count = 6;
+    light_positions[5] = Vec3(2.0f, 2.0f, -1.5f);
+    light_positions[6] = Vec3(-3.0f, 1.5f, -2.5f);
+    light_positions[7] = Vec3(1.0f, 1.0f, 2.0f);
+    light_positions[8] = Vec3(-2.0f, 2.0f, 1.5f);
+    
+    i32 point_light_count = 9;
 
     // TODO: we're technically passing the directional light POSITION to the shaders
     //       rather than the direction, this is incorrect but it works if we assume
@@ -504,6 +469,11 @@ int main(void)
 
     mat4x4 big_cube_model = Translation(-3.0f, 5.0f, -3.0f);
     mat4x4 big_cube_scale = Scaling(3.5f);
+
+    model_data backpack_data = LoadModel("backpack/backpack.obj");
+    vec3 backpack_scale = Vec3(0.1f, 0.1f, 0.1f);
+    mat4x4 backpack_rotation = RotationY(DegreesToRadians(-45.0f));
+    vec3 backpack_position = Vec3(-0.5f, 0.5f, -2.0f);
 
     while(state.is_running)
     {
@@ -617,8 +587,9 @@ int main(void)
             std::string position_str = "lights[" + std::to_string(i) + "].position";
             std::string color_str = "lights[" + std::to_string(i) + "].color";
             object_shader.set_vec3(position_str.c_str(), light_positions[i]);
-            object_shader.set_vec3(color_str.c_str(), Vec3(150.0f, 150.0f, 150.0f));
+            object_shader.set_vec3(color_str.c_str(), Vec3(20.0f, 20.0f, 20.0f));
         }
+        object_shader.set_vec3("lights[0].color", Vec3(500.0f, 500.0f, 500.0f));
         object_shader.set_int("shadow_map", 5);
         object_shader.set_float("near_plane_cascades[0]", near_plane_cascades[0]);
         object_shader.set_float("near_plane_cascades[1]", near_plane_cascades[1]);
@@ -627,21 +598,7 @@ int main(void)
         object_shader.set_float("far_plane_cascades[1]", far_plane_cascades[1]);
         object_shader.set_float("far_plane_cascades[2]", far_plane_cascades[2]);
 
-        // ALBEDO
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, wood_diffuse);
-        // NORMAL
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, default_normal_texture);
-        // METALLIC
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, black_texture);
-        // ROUGHNESS
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, black_texture);
-        // AO
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, white_texture);
+        SetShaderPBRTextures(&wood_textures);
 
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
@@ -653,21 +610,7 @@ int main(void)
         glDrawArrays(GL_TRIANGLES, 0, plane_triangles_count);
         glBindVertexArray(0);
 
-        // ALBEDO
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, iron_albedo);
-        // NORMAL
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, iron_normal);
-        // METALLIC
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, iron_metallic);
-        // ROUGHNESS
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, iron_roughness);
-        // AO
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, white_texture);
+        SetShaderPBRTextures(&rusted_iron_textures);
         model = big_cube_model * big_cube_scale;
         object_shader.set_mat4("model", model);
         object_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
@@ -685,6 +628,13 @@ int main(void)
             glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
             glBindVertexArray(0);
         }
+
+        model = Translation(backpack_position) * 
+                backpack_rotation *
+                Scaling(backpack_scale) * Identity();
+        object_shader.set_mat4("model", model);
+        object_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
+        RenderModel(&backpack_data);
 
         skybox_shader.use();
         view = Mat4x4(Mat3x3(CameraViewMatrix(&state.player_camera)));
@@ -714,6 +664,10 @@ int main(void)
             glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
             glBindVertexArray(0);
         }
+
+        current_time = glfwGetTime();
+        state.delta_time = current_time - state.last_time;
+        std::cout << "frame delta: " << (state.delta_time * 1000.0f) << "ms, " << (1.0f / state.delta_time) << "fps" << std::endl;
 
         glfwSwapBuffers(state.window);
         glfwPollEvents();

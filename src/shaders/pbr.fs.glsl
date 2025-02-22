@@ -166,7 +166,7 @@ void main()
     vec3 normal = GetNormalFromMap();
     float metallic = texture(metallic_map, vertex_output.tex_coords).r;
     float roughness = texture(roughness_map, vertex_output.tex_coords).r;
-    float AO = pow(texture(ambient_occlusion_map, vertex_output.tex_coords).r, 2.2);
+    float AO = pow(texture(ambient_occlusion_map, vertex_output.tex_coords).r, 2.2f);
 
     vec3 view = normalize(viewer_position - vertex_output.fragment_position);
 
@@ -181,7 +181,7 @@ void main()
         float cos_theta = clamp(dot(halfway, view), 0.0f, 1.0f);
 
         float distance = length(lights[i].position - vertex_output.fragment_position);
-        float attenuation = 1.0f / (distance * distance);
+        float attenuation = 1.0f / (distance);
         vec3 radiance = lights[i].color * attenuation;
 
         float D = NormalDistributionGGX(normal, halfway, roughness);
@@ -208,7 +208,8 @@ void main()
     //                  then convert to srgb space at the end
     // TODO: post processing
     // NOTE: HDR -> LDR, then gamma correct
-    color = color / (color + vec3(1.0f));
+    // NOTE: gamma = 2.2f, exposure = 0.2f
+    color = vec3(1.0f) - exp(-color * 0.2f);
     color = pow(color, vec3(1.0f / 2.2f));
     frag_color = vec4(color, 1.0f);
 }
