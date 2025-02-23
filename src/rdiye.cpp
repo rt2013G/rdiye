@@ -6,7 +6,7 @@
 
 #include "rd_lib.h"
 #include "camera.h"
-#include "rd_model.h"
+#include "rd_mesh.h"
 #include "temp_data.h"
 #include "shader.hpp"
 
@@ -99,7 +99,7 @@ void ProcessInput(GLFWwindow *window)
     }
     if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
     {
-        state.player_camera.settings.speed = 5.0f;
+        state.player_camera.settings.speed = 10.0f;
     }
     else
     {
@@ -261,6 +261,52 @@ mat4x4 GetLightSpaceMatrix(vec3 light_direction, u16 width, u16 height, f32 near
     return(result);
 }
 
+struct point_light
+{
+    vec3 position;
+    vec3 color;
+};
+
+#define MAX_POINT_LIGHTS 16
+GLOBAL vec3 default_light_color = Vec3(10.0f, 10.0f, 10.0f);
+struct scene
+{
+    std::vector<mesh_data> mesh_list;
+    point_light *light_list;
+    u32 light_count;
+};
+
+void RenderScene(scene *s)
+{
+    for(mesh_data &mesh : s->mesh_list)
+    {
+        RenderMesh(&mesh);
+    }
+}
+
+void SetLightInShader(ShaderProgram *shader, point_light *light_list, u32 light_count)
+{
+    shader->set_int("light_count", light_count);
+    for(u32 i = 0; i < light_count; i++)
+    {
+        std::string position_str = "lights[" + std::to_string(i) + "].position";
+        std::string color_str = "lights[" + std::to_string(i) + "].color";
+        shader->set_vec3(position_str.c_str(), light_list[i].position);
+        shader->set_vec3(color_str.c_str(), light_list[i].color);
+    }
+}
+
+void SetTransform(ShaderProgram *shader, vec3 position, vec3 scale = Vec3(1.0f), mat4x4 rotation = Identity())
+{
+    mat4x4 model = Translation(position) * rotation * Scaling(scale);
+    shader->set_mat4("model", model);
+    shader->set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model)))); 
+}
+void SetTransform(ShaderProgram *shader, vec3 position, f32 scale)
+{
+    SetTransform(shader, position, Vec3(scale)); 
+}
+
 int main(void)
 {
     glfwInit();
@@ -280,7 +326,7 @@ int main(void)
     }
     glViewport(0, 0, default_window_width, default_window_height);
 
-    glfwSwapInterval(1);
+    glfwSwapInterval(0);
     glfwSetFramebufferSizeCallback(window, ResizeCallback);
     glfwSetCursorPosCallback(window, MouseCallback);
     glfwSetScrollCallback(window, ScrollCallback);
@@ -297,7 +343,7 @@ int main(void)
     mouse_last_movement = Vec2(state.window_width / 2.0f, state.window_height / 2.0f);
 
     //ShaderProgram phong_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/phong.fs.glsl");
-    ShaderProgram object_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/pbr.fs.glsl");
+    ShaderProgram pbr_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/pbr.fs.glsl");
     ShaderProgram light_shader = ShaderProgram("src/shaders/lighting.vs.glsl", "src/shaders/lighting.fs.glsl");
     ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
     ShaderProgram shadow_shader("src/shaders/shadow_map.vs.glsl", "src/shaders/shadow_map.fs.glsl", 
@@ -313,13 +359,10 @@ int main(void)
         "skybox/front.jpg",
         "skybox/back.jpg",
     };
-
     GLuint skybox_cubemap = LoadCubemap(cubemap_faces, ArrayCount(cubemap_faces));
     GLuint black_texture = LoadTexture(TEXTURE_DEFAULT_BLACK);
     GLuint white_texture = LoadTexture(TEXTURE_DEFAULT_WHITE); 
     GLuint default_normal_texture = LoadTexture(TEXTURE_DEFAULT_NORMAL_MAP);
-    // GLuint cube_diffuse = LoadTexture("container2.png");
-    // GLuint cube_specular = LoadTexture("container2_s.png");
     GLuint wood_diffuse = LoadTexture("wood.png");
     pbr_texture_group wood_textures =
     {
@@ -333,71 +376,12 @@ int main(void)
     rusted_iron_textures.roughness = LoadTexture("rusted_iron/roughness.png");
     rusted_iron_textures.ao = white_texture;
 
-    GLuint skybox_vao, skybox_vbo;
-    glGenVertexArrays(1, &skybox_vao);
-    glGenBuffers(1, &skybox_vbo);
-    glBindVertexArray(skybox_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, skybox_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(SKYBOX_VERTICES), &SKYBOX_VERTICES[0], GL_STATIC_DRAW);
-    GLsizei skybox_triangles_count = sizeof(SKYBOX_VERTICES) / (sizeof(f32) * 3); 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32), (void *)0);
-    glBindVertexArray(0);
-
-    GLuint cube_vao, cube_vbo;
-    glGenVertexArrays(1, &cube_vao);
-    glGenBuffers(1, &cube_vbo);
-    glBindVertexArray(cube_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, cube_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(CUBE_VERTICES_TEXTURED), &CUBE_VERTICES_TEXTURED[0], GL_STATIC_DRAW);
-    GLsizei cube_triangles_count = sizeof(CUBE_VERTICES_TEXTURED) / (sizeof(f32) * 8); 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(3 * sizeof(f32)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(6 * sizeof(f32)));
-    glBindVertexArray(0);
-
-    GLuint plane_vao, plane_vbo;
-    glGenVertexArrays(1, &plane_vao);
-    glGenBuffers(1, &plane_vbo);
-    glBindVertexArray(plane_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, plane_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(PLANE_VERTICES), &PLANE_VERTICES[0], GL_STATIC_DRAW);
-    GLsizei plane_triangles_count = sizeof(PLANE_VERTICES) / (sizeof(f32) * 8); 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(3 * sizeof(f32)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(f32), (void *)(6 * sizeof(f32)));
-    glBindVertexArray(0);
-    
-    GLuint light_vao, light_vbo;
-    glGenVertexArrays(1, &light_vao);
-    glGenBuffers(1, &light_vbo);
-    glBindVertexArray(light_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, light_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(LIGHT_CUBE_VERTICES), LIGHT_CUBE_VERTICES, GL_STATIC_DRAW);
-    GLsizei light_triangles_count = sizeof(LIGHT_CUBE_VERTICES) / (sizeof(f32) * 3);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(f32), (void *)0);
-    glBindVertexArray(0);
-
-    #define MAX_LIGHTS 16
-    vec3 light_positions[MAX_LIGHTS] = {};
-    light_positions[0] = Vec3(-5.0f, 200.0f, -5.0f);
-    light_positions[1] = Vec3(2.5f, 1.5f, -2.5f);
-    light_positions[2] = Vec3(-2.0f, 0.5f, -1.5f);
-    light_positions[3] = Vec3(3.0f, 1.5f, 2.5f);
-    light_positions[4] = Vec3(-1.0f, 1.0f, -2.0f);
-    light_positions[5] = Vec3(2.0f, 2.0f, -1.5f);
-    light_positions[6] = Vec3(-3.0f, 1.5f, -2.5f);
-    light_positions[7] = Vec3(1.0f, 1.0f, 2.0f);
-    light_positions[8] = Vec3(-2.0f, 2.0f, 1.5f);
-    
-    i32 point_light_count = 9;
+    mesh_data sky_mesh = MeshDataUntextured(sizeof(SKYBOX_VERTICES) / (sizeof(f32) * 3), &SKYBOX_VERTICES[0]);
+    mesh_data cube_mesh = MeshData(sizeof(CUBE_VERTICES_TEXTURED) / (sizeof(f32) * 8), &CUBE_VERTICES_TEXTURED[0]);
+    cube_mesh.textures = rusted_iron_textures;
+    mesh_data plane_mesh = MeshData(sizeof(PLANE_VERTICES) / (sizeof(f32) * 8), &PLANE_VERTICES[0]);
+    plane_mesh.textures = wood_textures;
+    mesh_data light_mesh = MeshDataUntextured(sizeof(LIGHT_CUBE_VERTICES) / (sizeof(f32) * 3), &LIGHT_CUBE_VERTICES[0]); 
 
     // TODO: we're technically passing the directional light POSITION to the shaders
     //       rather than the direction, this is incorrect but it works if we assume
@@ -470,10 +454,40 @@ int main(void)
     mat4x4 big_cube_model = Translation(-3.0f, 5.0f, -3.0f);
     mat4x4 big_cube_scale = Scaling(3.5f);
 
-    model_data backpack_data = LoadModel("backpack/backpack.obj");
     vec3 backpack_scale = Vec3(0.1f, 0.1f, 0.1f);
     mat4x4 backpack_rotation = RotationY(DegreesToRadians(-45.0f));
     vec3 backpack_position = Vec3(-0.5f, 0.5f, -2.0f);
+
+    std::vector<mesh_data> mesh_list = std::vector<mesh_data>();
+    LoadModel(mesh_list, "backpack/backpack.obj");
+
+    point_light light_list[MAX_POINT_LIGHTS] =
+    {
+        {Vec3(-5.0f, 200.0f, -5.0f), Vec3(1000.0f, 1000.0f, 1000.0f)},
+        {Vec3(2.5f, 1.5f, -2.5f), default_light_color},
+        {Vec3(-2.0f, 0.5f, -1.5f), default_light_color},
+        {Vec3(-1.0f, 1.0f, -2.0f), default_light_color},
+        {Vec3(2.0f, 2.0f, -1.5f), default_light_color},
+        {Vec3(-3.0f, 1.5f, -2.5f), default_light_color},
+        {Vec3(1.0f, 1.0f, 2.0f), default_light_color},
+        {Vec3(2.5f, 1.5f, -2.5f), default_light_color},
+        {Vec3(-2.0f, 2.0f, 1.5f), default_light_color},
+
+        {Vec3(-4.0f, 1.25f, -0.75f), default_light_color},
+        {Vec3(6.0f, 2.0f, 1.0f), default_light_color},
+        {Vec3(-3.75f, 8.0f, -10.5f), default_light_color},
+        {Vec3(0.75f, 3.5f, 2.5f), default_light_color},
+        {Vec3(1.0f, 0.5f, 7.0f), default_light_color},
+        {Vec3(3.25f, 10.0f, -1.5f), default_light_color},
+        {Vec3(-1.0f, 5.0f, 2.0f), default_light_color},
+    };
+    u32 light_count = 16;
+
+    scene main_scene = {
+        mesh_list,
+        light_list,
+        light_count
+    };
 
     while(state.is_running)
     {
@@ -510,32 +524,25 @@ int main(void)
         glViewport(0, 0, depth_map_resolution, depth_map_resolution);
         glClear(GL_DEPTH_BUFFER_BIT);
         glCullFace(GL_FRONT);
+
         vec3 plane_position = Vec3(0.0f);
         mat4x4 model = Translation(plane_position);
         shadow_shader.set_mat4("model", model);
-        glBindVertexArray(plane_vao);
-        glDrawArrays(GL_TRIANGLES, 0, plane_triangles_count);
-        glBindVertexArray(0);
-
+        RenderMesh(&plane_mesh);
         vec3 cube_position = Vec3(0.0f);
         for(u32 i = 0; i < ArrayCount(transparent_cube_positions); i++)
         {
             cube_position = transparent_cube_positions[i];
             model = Translation(cube_position) * Scaling(transparent_cube_size);
             shadow_shader.set_mat4("model", model);
-            glBindVertexArray(cube_vao);
-            glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
-            glBindVertexArray(0);
+            RenderMesh(&cube_mesh);
         }
 
-        vec3 scene_center = Vec3(0.0f, 1.0f, 0.0f);
         // TODO: fix the function to rotate around a point
-        big_cube_model = big_cube_model * RotationP(RotationY(DegreesToRadians(30) * state.delta_time), scene_center);
+        big_cube_model = big_cube_model * RotationP(RotationY(DegreesToRadians(30) * state.delta_time), Vec3(0.0f, 0.0f, 0.0f));
         model = big_cube_model * big_cube_scale;
         shadow_shader.set_mat4("model", model);
-        glBindVertexArray(cube_vao);
-        glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
-        glBindVertexArray(0);
+        RenderMesh(&cube_mesh);
 
         glCullFace(GL_BACK);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -561,80 +568,53 @@ int main(void)
         model = Identity();
         light_shader.use();
         light_shader.set_mat4("projection_mul_view", projection_mul_view);
-        for(i32 i = 0; i < point_light_count; i++)
+        for(u32 i = 0; i < main_scene.light_count; i++)
         {
-            model = Translation(light_positions[i]) * Scaling(0.1f);
+            model = Translation(main_scene.light_list[i].position) * Scaling(0.1f);
             light_shader.set_mat4("model", model);
-            glBindVertexArray(light_vao);
-            glDrawArrays(GL_TRIANGLES, 0, light_triangles_count);
+            light_shader.set_vec3("light_color", main_scene.light_list[i].color);
+            RenderMesh(&light_mesh);
         }
-        glBindVertexArray(0);
         
-        object_shader.use();
-        object_shader.set_mat4("projection_mul_view", projection_mul_view);
-        object_shader.set_mat4("view", view);
-        object_shader.set_vec3("viewer_position", state.player_camera.position);
-        object_shader.set_int("albedo_map", 0);
-        object_shader.set_int("normal_map", 1);
-        object_shader.set_int("metallic_map", 2);
-        object_shader.set_int("roughness_map", 3);
-        object_shader.set_int("ambient_occlusion_map", 4);
-        // object_shader.set_float("shininess", 64.0f); // only used in the phong shader
-        object_shader.set_vec3("directional_light", directional_light);
-        object_shader.set_int("light_count", point_light_count);
-        for(i32 i = 0; i < point_light_count; i++)
-        {
-            std::string position_str = "lights[" + std::to_string(i) + "].position";
-            std::string color_str = "lights[" + std::to_string(i) + "].color";
-            object_shader.set_vec3(position_str.c_str(), light_positions[i]);
-            object_shader.set_vec3(color_str.c_str(), Vec3(20.0f, 20.0f, 20.0f));
-        }
-        object_shader.set_vec3("lights[0].color", Vec3(500.0f, 500.0f, 500.0f));
-        object_shader.set_int("shadow_map", 5);
-        object_shader.set_float("near_plane_cascades[0]", near_plane_cascades[0]);
-        object_shader.set_float("near_plane_cascades[1]", near_plane_cascades[1]);
-        object_shader.set_float("near_plane_cascades[2]", near_plane_cascades[2]);
-        object_shader.set_float("far_plane_cascades[0]", far_plane_cascades[0]);
-        object_shader.set_float("far_plane_cascades[1]", far_plane_cascades[1]);
-        object_shader.set_float("far_plane_cascades[2]", far_plane_cascades[2]);
+        pbr_shader.use();
+        pbr_shader.set_mat4("projection_mul_view", projection_mul_view);
+        pbr_shader.set_mat4("view", view);
+        pbr_shader.set_vec3("viewer_position", state.player_camera.position);
+        pbr_shader.set_int("albedo_map", 0);
+        pbr_shader.set_int("normal_map", 1);
+        pbr_shader.set_int("metallic_map", 2);
+        pbr_shader.set_int("roughness_map", 3);
+        pbr_shader.set_int("ambient_occlusion_map", 4);
+        pbr_shader.set_vec3("directional_light", directional_light);
+        pbr_shader.set_int("shadow_map", 5);
+        pbr_shader.set_float("near_plane_cascades[0]", near_plane_cascades[0]);
+        pbr_shader.set_float("near_plane_cascades[1]", near_plane_cascades[1]);
+        pbr_shader.set_float("near_plane_cascades[2]", near_plane_cascades[2]);
+        pbr_shader.set_float("far_plane_cascades[0]", far_plane_cascades[0]);
+        pbr_shader.set_float("far_plane_cascades[1]", far_plane_cascades[1]);
+        pbr_shader.set_float("far_plane_cascades[2]", far_plane_cascades[2]);
+        SetLightInShader(&pbr_shader, main_scene.light_list, main_scene.light_count);
 
         SetShaderPBRTextures(&wood_textures);
-
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
-        plane_position = Vec3(0.0f);
-        model = Translation(plane_position);
-        object_shader.set_mat4("model", model);
-        object_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
-        glBindVertexArray(plane_vao);
-        glDrawArrays(GL_TRIANGLES, 0, plane_triangles_count);
-        glBindVertexArray(0);
+        SetTransform(&pbr_shader, plane_position);
+        RenderMesh(&plane_mesh);
 
         SetShaderPBRTextures(&rusted_iron_textures);
         model = big_cube_model * big_cube_scale;
-        object_shader.set_mat4("model", model);
-        object_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
-        glBindVertexArray(cube_vao);
-        glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
-        glBindVertexArray(0);
+        pbr_shader.set_mat4("model", model);
+        pbr_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
+        RenderMesh(&cube_mesh);
 
         for(u32 i = 0; i < ArrayCount(transparent_cube_positions); i++)
         {
-            cube_position = transparent_cube_positions[i];
-            model = Translation(cube_position) * Scaling(transparent_cube_size);
-            object_shader.set_mat4("model", model);
-            object_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
-            glBindVertexArray(cube_vao);
-            glDrawArrays(GL_TRIANGLES, 0, cube_triangles_count);
-            glBindVertexArray(0);
+            SetTransform(&pbr_shader, transparent_cube_positions[i], transparent_cube_size);
+            RenderMesh(&cube_mesh);
         }
 
-        model = Translation(backpack_position) * 
-                backpack_rotation *
-                Scaling(backpack_scale) * Identity();
-        object_shader.set_mat4("model", model);
-        object_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
-        RenderModel(&backpack_data);
+        SetTransform(&pbr_shader, backpack_position, backpack_scale, backpack_rotation);
+        RenderScene(&main_scene);
 
         skybox_shader.use();
         view = Mat4x4(Mat3x3(CameraViewMatrix(&state.player_camera)));
@@ -644,9 +624,7 @@ int main(void)
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_cubemap);
         skybox_shader.set_int("skybox_cubemap", 0);
-        glBindVertexArray(skybox_vao);
-        glDrawArrays(GL_TRIANGLES, 0, skybox_triangles_count);
-        glBindVertexArray(0);
+        RenderMesh(&sky_mesh);
         glDepthFunc(GL_LESS);
 
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -665,12 +643,12 @@ int main(void)
             glBindVertexArray(0);
         }
 
+        glfwSwapBuffers(state.window);
+        glfwPollEvents();
+
         current_time = glfwGetTime();
         state.delta_time = current_time - state.last_time;
         std::cout << "frame delta: " << (state.delta_time * 1000.0f) << "ms, " << (1.0f / state.delta_time) << "fps" << std::endl;
-
-        glfwSwapBuffers(state.window);
-        glfwPollEvents();
     }
     glfwTerminate();
     return(0);
