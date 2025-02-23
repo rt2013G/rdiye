@@ -23,7 +23,8 @@ void ReplaceAll(std::string& input, std::string &old_char, std::string &new_char
     }
 }
 // NOTE: speeding up texture loading momentarily
-// TODO: texture system/db
+// TODO: texture system/db, separate handling of gltf textures,
+//       specify flip for each texture
 GLOBAL std::unordered_map<std::string, GLuint> global_loaded_textures;
 GLuint LoadTexture(std::string filename)
 {
@@ -41,6 +42,8 @@ GLuint LoadTexture(std::string filename)
     stbi_set_flip_vertically_on_load(true);
 
     std::string path = ASSETS_FOLDER + filename;
+    // TODO: add this print in a possible debug build
+    //std::cout << "loading texture: " << path << std::endl;
     u8 *data = stbi_load(path.c_str(), &texture_width, &texture_height, &channel_count, 0);
     if(data)
     {

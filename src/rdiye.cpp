@@ -268,7 +268,7 @@ struct point_light
 };
 
 #define MAX_POINT_LIGHTS 16
-GLOBAL vec3 default_light_color = Vec3(10.0f, 10.0f, 10.0f);
+GLOBAL vec3 default_light_color = Vec3(20.0f, 20.0f, 20.0f);
 struct scene
 {
     std::vector<mesh_data> mesh_list;
@@ -301,6 +301,10 @@ void SetTransform(ShaderProgram *shader, vec3 position, vec3 scale = Vec3(1.0f),
     mat4x4 model = Translation(position) * rotation * Scaling(scale);
     shader->set_mat4("model", model);
     shader->set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model)))); 
+}
+void SetTransform(ShaderProgram *shader, vec3 position, f32 scale, mat4x4 rotation)
+{
+    SetTransform(shader, position, Vec3(scale), rotation);
 }
 void SetTransform(ShaderProgram *shader, vec3 position, f32 scale)
 {
@@ -454,16 +458,17 @@ int main(void)
     mat4x4 big_cube_model = Translation(-3.0f, 5.0f, -3.0f);
     mat4x4 big_cube_scale = Scaling(3.5f);
 
+    std::vector<mesh_data> mesh_list = std::vector<mesh_data>();
+    LoadModel(mesh_list, "sponza_khronos/Sponza.gltf");
+/*
     vec3 backpack_scale = Vec3(0.1f, 0.1f, 0.1f);
     mat4x4 backpack_rotation = RotationY(DegreesToRadians(-45.0f));
     vec3 backpack_position = Vec3(-0.5f, 0.5f, -2.0f);
-
-    std::vector<mesh_data> mesh_list = std::vector<mesh_data>();
     LoadModel(mesh_list, "backpack/backpack.obj");
-
+*/
     point_light light_list[MAX_POINT_LIGHTS] =
     {
-        {Vec3(-5.0f, 200.0f, -5.0f), Vec3(1000.0f, 1000.0f, 1000.0f)},
+        {Vec3(-5.0f, 200.0f, -5.0f), Vec3(500.0f, 500.0f, 500.0f)},
         {Vec3(2.5f, 1.5f, -2.5f), default_light_color},
         {Vec3(-2.0f, 0.5f, -1.5f), default_light_color},
         {Vec3(-1.0f, 1.0f, -2.0f), default_light_color},
@@ -472,16 +477,8 @@ int main(void)
         {Vec3(1.0f, 1.0f, 2.0f), default_light_color},
         {Vec3(2.5f, 1.5f, -2.5f), default_light_color},
         {Vec3(-2.0f, 2.0f, 1.5f), default_light_color},
-
-        {Vec3(-4.0f, 1.25f, -0.75f), default_light_color},
-        {Vec3(6.0f, 2.0f, 1.0f), default_light_color},
-        {Vec3(-3.75f, 8.0f, -10.5f), default_light_color},
-        {Vec3(0.75f, 3.5f, 2.5f), default_light_color},
-        {Vec3(1.0f, 0.5f, 7.0f), default_light_color},
-        {Vec3(3.25f, 10.0f, -1.5f), default_light_color},
-        {Vec3(-1.0f, 5.0f, 2.0f), default_light_color},
     };
-    u32 light_count = 16;
+    u32 light_count = 9;
 
     scene main_scene = {
         mesh_list,
@@ -587,6 +584,7 @@ int main(void)
         pbr_shader.set_int("ambient_occlusion_map", 4);
         pbr_shader.set_vec3("directional_light", directional_light);
         pbr_shader.set_int("shadow_map", 5);
+        pbr_shader.set_int("use_metallic_roughness", 0);
         pbr_shader.set_float("near_plane_cascades[0]", near_plane_cascades[0]);
         pbr_shader.set_float("near_plane_cascades[1]", near_plane_cascades[1]);
         pbr_shader.set_float("near_plane_cascades[2]", near_plane_cascades[2]);
@@ -599,22 +597,26 @@ int main(void)
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
         SetTransform(&pbr_shader, plane_position);
-        RenderMesh(&plane_mesh);
+        //RenderMesh(&plane_mesh);
 
         SetShaderPBRTextures(&rusted_iron_textures);
         model = big_cube_model * big_cube_scale;
         pbr_shader.set_mat4("model", model);
         pbr_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
-        RenderMesh(&cube_mesh);
+        //RenderMesh(&cube_mesh);
 
         for(u32 i = 0; i < ArrayCount(transparent_cube_positions); i++)
         {
             SetTransform(&pbr_shader, transparent_cube_positions[i], transparent_cube_size);
-            RenderMesh(&cube_mesh);
+            //RenderMesh(&cube_mesh);
         }
 
-        SetTransform(&pbr_shader, backpack_position, backpack_scale, backpack_rotation);
+        // NOTE: this doesn't render everything at the moment
+        // TODO: finish render routine
+        pbr_shader.set_int("use_metallic_roughness", 1);
+        SetTransform(&pbr_shader, Vec3(0.0f, 0.0f, 0.0f), 0.01f);
         RenderScene(&main_scene);
+        pbr_shader.set_int("use_metallic_roughness", 0);
 
         skybox_shader.use();
         view = Mat4x4(Mat3x3(CameraViewMatrix(&state.player_camera)));

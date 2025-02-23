@@ -29,6 +29,10 @@ uniform sampler2D metallic_map;
 uniform sampler2D roughness_map;
 uniform sampler2D ambient_occlusion_map;
 
+// NOTE, TODO: temporary for gltf format
+// r=occlusion, g=roughness, b=metalness
+uniform int use_metallic_roughness;
+
 // SHADOW VARIABLES
 #define CASCADE_COUNT 3
 uniform float near_plane_cascades[CASCADE_COUNT];
@@ -167,7 +171,14 @@ void main()
     float metallic = texture(metallic_map, vertex_output.tex_coords).r;
     float roughness = texture(roughness_map, vertex_output.tex_coords).r;
     float AO = pow(texture(ambient_occlusion_map, vertex_output.tex_coords).r, 2.2f);
-
+    if(use_metallic_roughness > 0)
+    {
+        vec4 tmp = texture(metallic_map, vertex_output.tex_coords);
+        AO = tmp.r;
+        roughness = tmp.g;
+        metallic = tmp.b;
+    }
+    
     vec3 view = normalize(viewer_position - vertex_output.fragment_position);
 
     vec3 F0 = vec3(0.04f);
