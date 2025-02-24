@@ -214,7 +214,7 @@ frustum GetFrustumInWorldSpace(mat4x4 projection, mat4x4 view)
 // NOTE: gets the light space matrix for a single cascade
 mat4x4 GetLightSpaceMatrix(vec3 light_direction, u16 width, u16 height, f32 near_plane, f32 far_plane)
 {
-    mat4x4 projection = Perspective(state.player_camera.settings.FOV, width / height, near_plane, far_plane);
+    mat4x4 projection = Perspective(100.0f, width / height, near_plane, far_plane);
     mat4x4 view = CameraViewMatrix(&state.player_camera);
     frustum f = GetFrustumInWorldSpace(projection, view);
 
@@ -261,28 +261,13 @@ mat4x4 GetLightSpaceMatrix(vec3 light_direction, u16 width, u16 height, f32 near
     return(result);
 }
 
+#define MAX_POINT_LIGHTS 16
+GLOBAL vec3 default_light_color = Vec3(4.0f);
 struct point_light
 {
     vec3 position;
     vec3 color;
 };
-
-#define MAX_POINT_LIGHTS 16
-GLOBAL vec3 default_light_color = Vec3(20.0f, 20.0f, 20.0f);
-struct scene
-{
-    std::vector<mesh_data> mesh_list;
-    point_light *light_list;
-    u32 light_count;
-};
-
-void RenderScene(scene *s)
-{
-    for(mesh_data &mesh : s->mesh_list)
-    {
-        RenderMesh(&mesh);
-    }
-}
 
 void SetLightInShader(ShaderProgram *shader, point_light *light_list, u32 light_count)
 {
@@ -309,6 +294,44 @@ void SetTransform(ShaderProgram *shader, vec3 position, f32 scale, mat4x4 rotati
 void SetTransform(ShaderProgram *shader, vec3 position, f32 scale)
 {
     SetTransform(shader, position, Vec3(scale)); 
+}
+
+struct scene_node
+{
+    vec3 position;
+    mat4x4 rotation;
+    vec3 scale;
+
+    std::vector<mesh_data> mesh_list;
+
+    // TODO: temporary
+    b32 gltf_model;
+};
+
+scene_node SceneNode(vec3 position, mat4x4 rotation, vec3 scale, std::vector<mesh_data> &mesh_list, b32 gltf_model = 0)
+{
+    scene_node result;
+    result.position = position;
+    result.rotation = rotation;
+    result.scale = scale;
+    result.mesh_list = mesh_list;
+    result.gltf_model = gltf_model;
+
+    return(result);
+}
+
+void RenderNodeList(ShaderProgram *shader, scene_node *node_list, u32 node_count)
+{
+    for(u32 node_index = 0; node_index < node_count; node_index++)
+    {
+        scene_node node = node_list[node_index];
+        SetTransform(shader, node.position, node.scale, node.rotation);
+        shader->set_int("use_metallic_roughness", node.gltf_model);
+        for(mesh_data &mesh : node.mesh_list)
+        {
+            RenderMesh(&mesh);
+        }
+    }
 }
 
 int main(void)
@@ -346,6 +369,64 @@ int main(void)
     state.player_camera = DefaultCamera();
     mouse_last_movement = Vec2(state.window_width / 2.0f, state.window_height / 2.0f);
 
+    u32 depth_map_resolution = 2048;
+    GLuint light_fbo, light_depth_maps;
+    glGenFramebuffers(1, &light_fbo);
+    glGenTextures(1, &light_depth_maps);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT32F,
+                    depth_map_resolution, depth_map_resolution, SHADOW_CASCADES_COUNT, 
+                    0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    vec4 border_color = Vec4(1.0f);
+    glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, &border_color.e[0]);
+    
+    glBindFramebuffer(GL_FRAMEBUFFER, light_fbo);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, light_depth_maps, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        Assert("framebuffer incomplete");
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    GLuint matrices_ubo;
+    glGenBuffers(1, &matrices_ubo);
+    glBindBuffer(GL_UNIFORM_BUFFER, matrices_ubo);
+    glBufferData(GL_UNIFORM_BUFFER, sizeof(mat4x4) * SHADOW_CASCADES_COUNT, NULL, GL_STATIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, matrices_ubo);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    // NOTE: abritrary values based on the sponza scene
+    // TODO: consider changing them at run time
+    //       and maybe adding more cascades
+    f32 light_near_plane = 1.0f;
+    f32 light_far_plane = 100.0f;
+    f32 cascades_ratio = pow(light_far_plane / light_near_plane, 1.0f / SHADOW_CASCADES_COUNT);
+    f32 near_plane_cascades[SHADOW_CASCADES_COUNT] = 
+    {
+        light_near_plane, light_near_plane * cascades_ratio, light_near_plane * cascades_ratio * cascades_ratio
+    };
+    f32 far_plane_cascades[SHADOW_CASCADES_COUNT] =
+    {
+        light_near_plane * cascades_ratio, light_near_plane * cascades_ratio * cascades_ratio, light_far_plane
+    };
+
+    GLuint quad_vao, quad_vbo;
+    glGenVertexArrays(1, &quad_vao);
+    glGenBuffers(1, &quad_vbo);
+    glBindVertexArray(quad_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD_VERTICES), &QUAD_VERTICES[0], GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(f32), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(f32), (void *)(3 * sizeof(f32)));
+
     //ShaderProgram phong_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/phong.fs.glsl");
     ShaderProgram pbr_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/pbr.fs.glsl");
     ShaderProgram light_shader = ShaderProgram("src/shaders/lighting.vs.glsl", "src/shaders/lighting.fs.glsl");
@@ -381,110 +462,69 @@ int main(void)
     rusted_iron_textures.ao = white_texture;
 
     mesh_data sky_mesh = MeshDataUntextured(sizeof(SKYBOX_VERTICES) / (sizeof(f32) * 3), &SKYBOX_VERTICES[0]);
-    mesh_data cube_mesh = MeshData(sizeof(CUBE_VERTICES_TEXTURED) / (sizeof(f32) * 8), &CUBE_VERTICES_TEXTURED[0]);
-    cube_mesh.textures = rusted_iron_textures;
     mesh_data plane_mesh = MeshData(sizeof(PLANE_VERTICES) / (sizeof(f32) * 8), &PLANE_VERTICES[0]);
     plane_mesh.textures = wood_textures;
-    mesh_data light_mesh = MeshDataUntextured(sizeof(LIGHT_CUBE_VERTICES) / (sizeof(f32) * 3), &LIGHT_CUBE_VERTICES[0]); 
 
-    // TODO: we're technically passing the directional light POSITION to the shaders
-    //       rather than the direction, this is incorrect but it works if we assume
-    //       that the light is always looking at the center of the scene and we negate it
-    //       in the shader. however, it should be fixed at some point
-    vec3 dir_light_pos = Vec3(-10.0f, 30.0f, -10.0f);
-    vec3 directional_light = Normalize(dir_light_pos);
+    mesh_data light_mesh = MeshDataUntextured(sizeof(LIGHT_CUBE_VERTICES) / (sizeof(f32) * 3), &LIGHT_CUBE_VERTICES[0]);
+    vec3 sun_position = Vec3(-4.0f, 100.0f, -4.0f);
+    vec3 sun_direction = Normalize(sun_position);
+    vec3 sun_intensity = Vec3(4000.0f);
+    point_light light_list[MAX_POINT_LIGHTS] =
+    {
+        {Vec3(-0.5f, 2.5f, -0.5f), default_light_color},
+        {Vec3(-1.25f, 1.0f, -1.25f), default_light_color},
+        {Vec3(-2.0f, 0.5f, -1.75f), default_light_color},
+        {Vec3(1.75f, 1.0f, 1.0f), default_light_color},
+        {Vec3(1.5f, 1.5f, -1.625f), default_light_color},
 
-    vec3 transparent_cube_positions[4] =
+        // NOTE: keep sun as the last light in the array
+        {sun_position, sun_intensity},
+    };
+    u32 light_count = 6;
+
+    std::vector<mesh_data> sponza_mesh_list = std::vector<mesh_data>();
+    LoadModel(sponza_mesh_list, "sponza_khronos/Sponza.gltf");
+    scene_node sponza_node = 
+    {
+        Vec3(0.0f, 0.0f, 0.0f), Identity(), Vec3(0.01f), sponza_mesh_list, 1,
+    };
+
+    std::vector<mesh_data> backpack_mesh_list = std::vector<mesh_data>();
+    LoadModel(backpack_mesh_list, "backpack/backpack.obj");
+    scene_node backpack_node = 
+    {
+        Vec3(-0.5f, 0.5f, -2.0f), RotationY(DegreesToRadians(-45.0f)), Vec3(0.25f), backpack_mesh_list, 0,
+    };
+
+    mesh_data cube_mesh = MeshData(sizeof(CUBE_VERTICES_TEXTURED) / (sizeof(f32) * 8), &CUBE_VERTICES_TEXTURED[0]);
+    cube_mesh.textures = rusted_iron_textures;
+    std::vector<mesh_data> cube_mesh_list = {cube_mesh};
+    vec3 cube_positions[4] = 
     {
         Vec3(0.5f, 2.0f, 1.5f),
         Vec3(-0.2f, 1.0f, -1.0f),
         Vec3(2.0f, 1.5f, 0.5f),
         Vec3(0.5f, 3.0f, -1.0f),
     };
-    f32 transparent_cube_size = 0.8f;
-
-    u32 depth_map_resolution = 4096;
-    GLuint light_fbo, light_depth_maps;
-    glGenFramebuffers(1, &light_fbo);
-    glGenTextures(1, &light_depth_maps);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
-    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT32F,
-                    depth_map_resolution, depth_map_resolution, SHADOW_CASCADES_COUNT + 1, 
-                    0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    vec4 border_color = Vec4(1.0f);
-    glTexParameterfv(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BORDER_COLOR, &border_color.e[0]);
+    scene_node cube_nodes[4] =
+    {
+        SceneNode(cube_positions[0], Identity(), Vec3(0.1f), cube_mesh_list),
+        SceneNode(cube_positions[1], Identity(), Vec3(0.1f), cube_mesh_list),
+        SceneNode(cube_positions[2], Identity(), Vec3(0.1f), cube_mesh_list),
+        SceneNode(cube_positions[3], Identity(), Vec3(0.1f), cube_mesh_list),
+    };
     
-    glBindFramebuffer(GL_FRAMEBUFFER, light_fbo);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, light_depth_maps, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    scene_node big_rotating_cube =
     {
-        Assert("framebuffer incomplete");
-    }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    GLuint matrices_ubo;
-    glGenBuffers(1, &matrices_ubo);
-    glBindBuffer(GL_UNIFORM_BUFFER, matrices_ubo);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(mat4x4) * SHADOW_CASCADES_COUNT, NULL, GL_STATIC_DRAW);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, matrices_ubo);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-    // NOTE: the 0.5f is a value added to prevent the nearest cascade to have too high of a precision
-    //       while leaving the farthest cascades with having to cover too large of an area
-    f32 near_plane = state.player_camera.settings.near_plane + 0.5f;
-    f32 far_plane = state.player_camera.settings.far_plane;
-    f32 shadow_cascades_ratio = pow(far_plane / near_plane, 1.0f / SHADOW_CASCADES_COUNT);
-    f32 near_plane_cascades[3] = {near_plane, near_plane * shadow_cascades_ratio, near_plane * shadow_cascades_ratio * shadow_cascades_ratio};
-    f32 far_plane_cascades[3] = {near_plane * shadow_cascades_ratio, near_plane * shadow_cascades_ratio * shadow_cascades_ratio, far_plane};
-    near_plane -= 0.5f;
-
-    GLuint quad_vao, quad_vbo;
-    glGenVertexArrays(1, &quad_vao);
-    glGenBuffers(1, &quad_vbo);
-    glBindVertexArray(quad_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, quad_vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(QUAD_VERTICES), &QUAD_VERTICES[0], GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(f32), (void *)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(f32), (void *)(3 * sizeof(f32)));
-
-    mat4x4 big_cube_model = Translation(-3.0f, 5.0f, -3.0f);
-    mat4x4 big_cube_scale = Scaling(3.5f);
-
-    std::vector<mesh_data> mesh_list = std::vector<mesh_data>();
-    LoadModel(mesh_list, "sponza_khronos/Sponza.gltf");
-/*
-    vec3 backpack_scale = Vec3(0.1f, 0.1f, 0.1f);
-    mat4x4 backpack_rotation = RotationY(DegreesToRadians(-45.0f));
-    vec3 backpack_position = Vec3(-0.5f, 0.5f, -2.0f);
-    LoadModel(mesh_list, "backpack/backpack.obj");
-*/
-    point_light light_list[MAX_POINT_LIGHTS] =
+        Vec3(-1.0f, 2.0f, -1.0f), Identity(), Vec3(0.5f), cube_mesh_list, 0,
+    };
+    
+    scene_node render_list[7] =
     {
-        {Vec3(-5.0f, 200.0f, -5.0f), Vec3(500.0f, 500.0f, 500.0f)},
-        {Vec3(2.5f, 1.5f, -2.5f), default_light_color},
-        {Vec3(-2.0f, 0.5f, -1.5f), default_light_color},
-        {Vec3(-1.0f, 1.0f, -2.0f), default_light_color},
-        {Vec3(2.0f, 2.0f, -1.5f), default_light_color},
-        {Vec3(-3.0f, 1.5f, -2.5f), default_light_color},
-        {Vec3(1.0f, 1.0f, 2.0f), default_light_color},
-        {Vec3(2.5f, 1.5f, -2.5f), default_light_color},
-        {Vec3(-2.0f, 2.0f, 1.5f), default_light_color},
+        sponza_node, backpack_node, big_rotating_cube,
+        cube_nodes[0], cube_nodes[1], cube_nodes[2], cube_nodes[3],
     };
-    u32 light_count = 9;
-
-    scene main_scene = {
-        mesh_list,
-        light_list,
-        light_count
-    };
+    u32 render_list_count = 7;
 
     while(state.is_running)
     {
@@ -497,16 +537,31 @@ int main(void)
         glClearColor(0.2, 0.2, 0.2, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        mat4x4 light_spaces_matrices[3] =
+        // NOTE: this is just a silly thing i pulled out
+        //       of my a** to simulate a day/night cycle
+        // TODO: real day/light cycle, sunlight, atmospheric scattering
+        f32 day_time_sine = Sine(current_time / 10.0f);
+        f32 day_time = Maximum((day_time_sine + 1.0f) / 2.0f, 0.01f);
+        day_time *= day_time;
+        light_list[light_count - 1].color = Hadamard(Vec3(day_time), sun_intensity);
+        light_list[light_count - 1].position += Vec3(day_time_sine / 10.0f) * state.delta_time;
+        sun_direction = Normalize(light_list[light_count - 1].position);
+
+        // TODO: fix the function to rotate around a point
+        render_list[2].rotation = render_list[2].rotation *
+                                  RotationP(RotationY(DegreesToRadians(30) * state.delta_time), Vec3(0.0f, 0.0f, 0.0f)) *
+                                  RotationZ(DegreesToRadians(15) * state.delta_time) * 
+                                  RotationX(DegreesToRadians(45) * state.delta_time);
+
+        mat4x4 light_spaces_matrices[SHADOW_CASCADES_COUNT] =
         {
-            Transpose(GetLightSpaceMatrix(directional_light, state.window_width, state.window_height, 
+            Transpose(GetLightSpaceMatrix(sun_direction, state.window_width, state.window_height, 
                                 near_plane_cascades[0], far_plane_cascades[0])),
-            Transpose(GetLightSpaceMatrix(directional_light, state.window_width, state.window_height, 
+            Transpose(GetLightSpaceMatrix(sun_direction, state.window_width, state.window_height, 
                                 near_plane_cascades[1], far_plane_cascades[1])),
-            Transpose(GetLightSpaceMatrix(directional_light, state.window_width, state.window_height, 
+            Transpose(GetLightSpaceMatrix(sun_direction, state.window_width, state.window_height, 
                                 near_plane_cascades[2], far_plane_cascades[2])),
         };
-
         glBindBuffer(GL_UNIFORM_BUFFER, matrices_ubo);
         for (u32 i = 0; i < ArrayCount(light_spaces_matrices); i++)
         {
@@ -515,32 +570,13 @@ int main(void)
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
         glEnable(GL_DEPTH_CLAMP);
-        shadow_shader.use();
         glBindFramebuffer(GL_FRAMEBUFFER, light_fbo);
         glFramebufferTexture(GL_FRAMEBUFFER, GL_TEXTURE_2D_ARRAY, light_depth_maps, 0);
         glViewport(0, 0, depth_map_resolution, depth_map_resolution);
         glClear(GL_DEPTH_BUFFER_BIT);
         glCullFace(GL_FRONT);
-
-        vec3 plane_position = Vec3(0.0f);
-        mat4x4 model = Translation(plane_position);
-        shadow_shader.set_mat4("model", model);
-        RenderMesh(&plane_mesh);
-        vec3 cube_position = Vec3(0.0f);
-        for(u32 i = 0; i < ArrayCount(transparent_cube_positions); i++)
-        {
-            cube_position = transparent_cube_positions[i];
-            model = Translation(cube_position) * Scaling(transparent_cube_size);
-            shadow_shader.set_mat4("model", model);
-            RenderMesh(&cube_mesh);
-        }
-
-        // TODO: fix the function to rotate around a point
-        big_cube_model = big_cube_model * RotationP(RotationY(DegreesToRadians(30) * state.delta_time), Vec3(0.0f, 0.0f, 0.0f));
-        model = big_cube_model * big_cube_scale;
-        shadow_shader.set_mat4("model", model);
-        RenderMesh(&cube_mesh);
-
+        shadow_shader.use();
+        RenderNodeList(&shadow_shader, render_list, render_list_count);
         glCullFace(GL_BACK);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, state.window_width, state.window_height);
@@ -555,6 +591,7 @@ int main(void)
         {
             f32 view_volume_scale = state.player_camera.settings.FOV / 3;
             f32 aspect_ratio = state.window_width / state.window_height;
+            f32 far_plane = state.player_camera.settings.far_plane;
             projection = Orthographic(-aspect_ratio * view_volume_scale, -view_volume_scale, -far_plane,
                                       aspect_ratio * view_volume_scale, view_volume_scale, far_plane);
         }
@@ -562,14 +599,15 @@ int main(void)
         mat4x4 projection_mul_view = projection * view;
 
         // TODO: add normal matrix to the shaders to fix normals on non-uniform transforms
-        model = Identity();
+        mat4x4 model = Identity();
         light_shader.use();
         light_shader.set_mat4("projection_mul_view", projection_mul_view);
-        for(u32 i = 0; i < main_scene.light_count; i++)
+        // TODO: include light emitters in the render list
+        for(u32 i = 0; i < light_count; i++)
         {
-            model = Translation(main_scene.light_list[i].position) * Scaling(0.1f);
+            model = Translation(light_list[i].position) * Scaling(0.1f);
             light_shader.set_mat4("model", model);
-            light_shader.set_vec3("light_color", main_scene.light_list[i].color);
+            light_shader.set_vec3("light_color", light_list[i].color);
             RenderMesh(&light_mesh);
         }
         
@@ -582,7 +620,7 @@ int main(void)
         pbr_shader.set_int("metallic_map", 2);
         pbr_shader.set_int("roughness_map", 3);
         pbr_shader.set_int("ambient_occlusion_map", 4);
-        pbr_shader.set_vec3("directional_light", directional_light);
+        pbr_shader.set_vec3("sun_direction", sun_direction);
         pbr_shader.set_int("shadow_map", 5);
         pbr_shader.set_int("use_metallic_roughness", 0);
         pbr_shader.set_float("near_plane_cascades[0]", near_plane_cascades[0]);
@@ -591,32 +629,11 @@ int main(void)
         pbr_shader.set_float("far_plane_cascades[0]", far_plane_cascades[0]);
         pbr_shader.set_float("far_plane_cascades[1]", far_plane_cascades[1]);
         pbr_shader.set_float("far_plane_cascades[2]", far_plane_cascades[2]);
-        SetLightInShader(&pbr_shader, main_scene.light_list, main_scene.light_count);
+        SetLightInShader(&pbr_shader, light_list, light_count);
 
-        SetShaderPBRTextures(&wood_textures);
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
-        SetTransform(&pbr_shader, plane_position);
-        //RenderMesh(&plane_mesh);
-
-        SetShaderPBRTextures(&rusted_iron_textures);
-        model = big_cube_model * big_cube_scale;
-        pbr_shader.set_mat4("model", model);
-        pbr_shader.set_mat3("normal_matrix", Mat3x3(Transpose(Inverse(model))));
-        //RenderMesh(&cube_mesh);
-
-        for(u32 i = 0; i < ArrayCount(transparent_cube_positions); i++)
-        {
-            SetTransform(&pbr_shader, transparent_cube_positions[i], transparent_cube_size);
-            //RenderMesh(&cube_mesh);
-        }
-
-        // NOTE: this doesn't render everything at the moment
-        // TODO: finish render routine
-        pbr_shader.set_int("use_metallic_roughness", 1);
-        SetTransform(&pbr_shader, Vec3(0.0f, 0.0f, 0.0f), 0.01f);
-        RenderScene(&main_scene);
-        pbr_shader.set_int("use_metallic_roughness", 0);
+        RenderNodeList(&pbr_shader, render_list, render_list_count);
 
         skybox_shader.use();
         view = Mat4x4(Mat3x3(CameraViewMatrix(&state.player_camera)));
@@ -628,7 +645,6 @@ int main(void)
         skybox_shader.set_int("skybox_cubemap", 0);
         RenderMesh(&sky_mesh);
         glDepthFunc(GL_LESS);
-
         glBindTexture(GL_TEXTURE_2D, 0);
 
         if(render_debug_quad_layer < SHADOW_CASCADES_COUNT)
@@ -650,7 +666,11 @@ int main(void)
 
         current_time = glfwGetTime();
         state.delta_time = current_time - state.last_time;
+#if 0
+        std::cout << "sine: " << day_time_sine << ", day_time: " << day_time << std::endl;
+#else
         std::cout << "frame delta: " << (state.delta_time * 1000.0f) << "ms, " << (1.0f / state.delta_time) << "fps" << std::endl;
+#endif
     }
     glfwTerminate();
     return(0);

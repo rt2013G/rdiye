@@ -20,7 +20,7 @@ in vs_out
 // RENDERING VARIABLES
 uniform mat4 view;
 uniform vec3 viewer_position;
-uniform vec3 directional_light;
+uniform vec3 sun_direction;
 uniform point_light lights[MAX_LIGHTS];
 uniform int light_count;
 uniform sampler2D albedo_map;
@@ -92,9 +92,8 @@ float CalculateShadow(vec3 world_position)
         return 0.0f;
     }
 
-    //vec3 normal = normalize(vertex_output.normal);
     vec3 normal = GetNormalFromMap();
-    float bias = max(0.05f * (1.0f - dot(normal, directional_light)), 0.005f);
+    float bias = max(0.05f * (1.0f - dot(normal, sun_direction)), 0.005f);
     if(layer == CASCADE_COUNT - 1)
     {
         bias *= 1.0f / (far_plane_cascades[layer] * 0.5f);
@@ -162,8 +161,43 @@ vec3 FresnelSchlick(float cos_theta, vec3 F0)
     return(result);
 }
 
+vec3 CalculateLightContribution(vec3 light_position, vec3 light_color, vec3 view, vec3 normal, vec3 albedo, float roughness, float metallic, vec3 F0)
+{
+    vec3 light_direction = normalize(light_position - vertex_output.fragment_position);
+    vec3 halfway = normalize(light_direction + view);
+    float cos_theta = clamp(dot(halfway, view), 0.0f, 1.0f);
+
+    float distance = length(light_position - vertex_output.fragment_position);
+    // TODO: should attenuation really be 1/d or 1/d^2 ?
+    float attenuation = 1.0f / (distance);
+    vec3 radiance = light_color * attenuation;
+
+    float D = NormalDistributionGGX(normal, halfway, roughness);
+    float G = GeometrySmithShlick(normal, view, light_direction, roughness);
+    vec3 F = FresnelSchlick(cos_theta, F0);
+    vec3 numerator = D * F * G;
+    float n_dot_v = clamp(dot(normal, view), 0.0f, 1.0f);
+    float n_dot_l = clamp(dot(normal, light_direction), 0.0f, 1.0f);
+    float denominator = (4.0f * n_dot_v * n_dot_l) + 0.00001f;
+    vec3 specular = numerator / denominator;
+
+    vec3 k_specular = F;
+    vec3 k_diffuse = vec3(1.0f) - k_specular;
+    // NOTE: if the material is metallic, the diffuse is 0 since metals don't refract light
+    k_diffuse *= (1.0f - metallic);
+    vec3 result = ((k_diffuse * albedo / PI32) + specular) * radiance * n_dot_l;
+
+    return(result);
+}
+
 void main()
 {
+    // NOTE, TODO: temporary, we don't handle translucent objects yet
+    if(texture(albedo_map, vertex_output.tex_coords).a < 0.69420f)
+    {
+        discard;
+    }
+
     // NOTE: albedo and AO textures are usually in srgb space, so we need to first
     //       convert them to linear space
     vec3 albedo = pow(texture(albedo_map, vertex_output.tex_coords).rgb, vec3(2.2f));
@@ -174,7 +208,7 @@ void main()
     if(use_metallic_roughness > 0)
     {
         vec4 tmp = texture(metallic_map, vertex_output.tex_coords);
-        AO = tmp.r;
+        //AO = tmp.r;
         roughness = tmp.g;
         metallic = tmp.b;
     }
@@ -187,33 +221,20 @@ void main()
     vec3 Lo = vec3(0.0f);
     for(int i = 0; i < light_count; i++)
     {
-        vec3 light_direction = normalize(lights[i].position - vertex_output.fragment_position);
-        vec3 halfway = normalize(light_direction + view);
-        float cos_theta = clamp(dot(halfway, view), 0.0f, 1.0f);
-
-        float distance = length(lights[i].position - vertex_output.fragment_position);
-        float attenuation = 1.0f / (distance);
-        vec3 radiance = lights[i].color * attenuation;
-
-        float D = NormalDistributionGGX(normal, halfway, roughness);
-        float G = GeometrySmithShlick(normal, view, light_direction, roughness);
-        vec3 F = FresnelSchlick(cos_theta, F0);
-        vec3 numerator = D * F * G;
-        float n_dot_v = clamp(dot(normal, view), 0.0f, 1.0f);
-        float n_dot_l = clamp(dot(normal, light_direction), 0.0f, 1.0f);
-        float denominator = (4.0f * n_dot_v * n_dot_l) + 0.00001f;
-        vec3 specular = numerator / denominator;
-
-        vec3 k_specular = F;
-        vec3 k_diffuse = vec3(1.0f) - k_specular;
-        // NOTE: if the material is metallic, the diffuse is 0 since metals don't refract light
-        k_diffuse *= (1.0f - metallic);
-        Lo += ((k_diffuse * albedo / PI32) + specular) * radiance * n_dot_l;
+        vec3 light_contribution = CalculateLightContribution(lights[i].position, lights[i].color, 
+                                         view, normal, albedo, 
+                                         roughness, metallic, F0);
+        // NOTE, TODO: temporary so we can store the sun
+        //             in the light list
+        if(i == (light_count - 1))
+        {
+            float shadow = 1.0f - CalculateShadow(vertex_output.fragment_position);
+            light_contribution *= shadow;
+        }
+        Lo += light_contribution;
     }
     vec3 ambient = vec3(0.03f) * albedo * AO;
     vec3 color = ambient + Lo;
-
-    // TODO: add sunlight and re-add shadows
 
     // NOTE, IMPORTANT: ALL PBR CALCULATIONS MUST BE DONE IN LINEAR SPACE!!!
     //                  then convert to srgb space at the end
