@@ -198,8 +198,9 @@ void main()
         discard;
     }
 
-    // NOTE: albedo and AO textures are usually in srgb space, so we need to first
-    //       convert them to linear space
+    // NOTE, IMPORTANT: ALL PBR CALCULATIONS MUST BE DONE IN LINEAR SPACE!!!
+    //                  albedo and AO textures are usually in srgb space, 
+    //                  so we need to first convert them to linear space
     vec3 albedo = pow(texture(albedo_map, vertex_output.tex_coords).rgb, vec3(2.2f));
     vec3 normal = GetNormalFromMap();
     float metallic = texture(metallic_map, vertex_output.tex_coords).r;
@@ -236,12 +237,5 @@ void main()
     vec3 ambient = vec3(0.03f) * albedo * AO;
     vec3 color = ambient + Lo;
 
-    // NOTE, IMPORTANT: ALL PBR CALCULATIONS MUST BE DONE IN LINEAR SPACE!!!
-    //                  then convert to srgb space at the end
-    // TODO: post processing
-    // NOTE: HDR -> LDR, then gamma correct
-    // NOTE: gamma = 2.2f, exposure = 0.2f
-    color = vec3(1.0f) - exp(-color * 0.2f);
-    color = pow(color, vec3(1.0f / 2.2f));
     frag_color = vec4(color, 1.0f);
 }

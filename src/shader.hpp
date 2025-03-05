@@ -15,6 +15,7 @@ struct ShaderProgram {
     void set_int(const char *name, i32 value);
     void set_float(const char *name, f32 value);
     void set_bool(const char *name, b32 value);
+    void set_vec2(const char *name, vec2 vec);
     void set_vec3(const char *name, vec3 vec);
     void set_mat4(const char *name, mat4x4 mat);
     void set_mat3(const char *name, mat3x3 mat);
@@ -113,6 +114,11 @@ void ShaderProgram::set_float(const char *name, f32 value)
 void ShaderProgram::set_bool(const char* name, b32 value)
 {
     glUniform1i(glGetUniformLocation(id, name), value);
+}
+
+void ShaderProgram::set_vec2(const char *name, vec2 vec)
+{
+   glUniform2fv(glGetUniformLocation(id, name), 1, &vec.e[0]); 
 }
 
 void ShaderProgram::set_vec3(const char *name, vec3 vec)

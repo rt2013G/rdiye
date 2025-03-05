@@ -32,6 +32,14 @@ GLOBAL i32 render_debug_quad_layer = SHADOW_CASCADES_COUNT;
 
 GLOBAL b32 camera_mode_ortho = false;
 
+#define POST_PROCESSING_ENABLED 1
+GLOBAL f32 tonemapping_exposure = 0.5f;
+GLOBAL b32 bloom_enabled = 1;
+
+// 0 = no tonemapping, 1 = just hdr->ldr correction, 
+// 2 = aces tonemapper
+GLOBAL i32 tonemapper_choice = 2;
+
 void ResizeCallback(GLFWwindow *window, i32 width, i32 height)
 {
     glViewport(0, 0, width, height);
@@ -123,10 +131,52 @@ void ProcessInput(GLFWwindow *window)
         {
             render_debug_quad_layer = SHADOW_CASCADES_COUNT;
         }
+
+        if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+        {
+            if(tonemapping_exposure > 0.0f)
+            {
+                tonemapping_exposure -= 0.001f;
+            }
+            else
+            {
+                tonemapping_exposure = 0.0f;
+            }
+            std::cout << "exposure: " << tonemapping_exposure << std::endl;
+        }
+        else if(glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+        {
+            tonemapping_exposure += 0.001f;
+            std::cout << "exposure: " << tonemapping_exposure << std::endl;
+        }
+
+        if(glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS)
+        {
+            bloom_enabled = 0;
+        }
+        else
+        {
+            bloom_enabled = 1;
+        }
     }
     if(glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS)
     {
         camera_mode_ortho = !camera_mode_ortho;
+    }
+    if(glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS)
+    {
+        if(glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS)
+        {
+            tonemapper_choice = 0;
+        }
+        else if(glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
+        {
+            tonemapper_choice = 1;
+        }
+        else if(glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
+        {
+            tonemapper_choice = 2;
+        }
     }
 }
 
@@ -334,6 +384,12 @@ void RenderNodeList(ShaderProgram *shader, scene_node *node_list, u32 node_count
     }
 }
 
+struct bloom_mip
+{
+    GLuint texture_id;
+    vec2 screen_size;
+};
+
 int main(void)
 {
     glfwInit();
@@ -369,14 +425,38 @@ int main(void)
     state.player_camera = DefaultCamera();
     mouse_last_movement = Vec2(state.window_width / 2.0f, state.window_height / 2.0f);
 
-    u32 depth_map_resolution = 2048;
+    GLuint render_fbo, render_fbo_texture, render_fbo_depth_stencil;
+    glGenFramebuffers(1, &render_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, render_fbo);
+    
+    glGenTextures(1, &render_fbo_texture);
+    glBindTexture(GL_TEXTURE_2D, render_fbo_texture);
+    // TODO: framebuffer size is not updated with window resizing
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, state.window_width, state.window_height, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render_fbo_texture, 0);
+    
+    glGenRenderbuffers(1, &render_fbo_depth_stencil);
+    glBindRenderbuffer(GL_RENDERBUFFER, render_fbo_depth_stencil);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, state.window_width, state.window_height);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, render_fbo_depth_stencil);
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        Assert("framebuffer incomplete");
+    }
+
+    u32 depth_map_resolution = 4096;
     GLuint light_fbo, light_depth_maps;
     glGenFramebuffers(1, &light_fbo);
     glGenTextures(1, &light_depth_maps);
     glBindTexture(GL_TEXTURE_2D_ARRAY, light_depth_maps);
     glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_DEPTH_COMPONENT32F,
                     depth_map_resolution, depth_map_resolution, SHADOW_CASCADES_COUNT, 
-                    0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+                    0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
@@ -392,7 +472,6 @@ int main(void)
     {
         Assert("framebuffer incomplete");
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     GLuint matrices_ubo;
     glGenBuffers(1, &matrices_ubo);
@@ -416,6 +495,35 @@ int main(void)
         light_near_plane * cascades_ratio, light_near_plane * cascades_ratio * cascades_ratio, light_far_plane
     };
 
+    #define BLOOM_MIP_COUNT 5
+    bloom_mip bloom_mip_list[BLOOM_MIP_COUNT]{};
+    vec2 mip_size = Vec2(state.window_width, state.window_height);
+    for(i32 mip_index = 0; mip_index < BLOOM_MIP_COUNT; mip_index++)
+    {
+        mip_size *= 0.5f;
+        bloom_mip_list[mip_index].screen_size = mip_size;
+        glGenTextures(1, &(bloom_mip_list[mip_index].texture_id));
+        glBindTexture(GL_TEXTURE_2D, bloom_mip_list[mip_index].texture_id);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R11F_G11F_B10F, (i32) mip_size.x, (i32) mip_size.y,
+                     0, GL_RGB, GL_FLOAT, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+    GLuint bloom_fbo;
+    glGenFramebuffers(1, &bloom_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, bloom_fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, bloom_mip_list[0].texture_id, 0);
+    u32 bloom_fbo_attachments[1] = {GL_COLOR_ATTACHMENT0};
+    glDrawBuffers(1, bloom_fbo_attachments);
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        Assert("framebuffer incomplete");
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     GLuint quad_vao, quad_vbo;
     glGenVertexArrays(1, &quad_vao);
     glGenBuffers(1, &quad_vbo);
@@ -427,13 +535,26 @@ int main(void)
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(f32), (void *)(3 * sizeof(f32)));
 
-    //ShaderProgram phong_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/phong.fs.glsl");
+    GLuint screen_quad_vao, screen_quad_vbo;
+    glGenVertexArrays(1, &screen_quad_vao);
+    glGenBuffers(1, &screen_quad_vbo);
+    glBindVertexArray(screen_quad_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, screen_quad_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(SCREEN_QUAD_VERTICES), &SCREEN_QUAD_VERTICES[0], GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(f32), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(f32), (void *)(2 * sizeof(f32)));
+
     ShaderProgram pbr_shader = ShaderProgram("src/shaders/vs.glsl", "src/shaders/pbr.fs.glsl");
     ShaderProgram light_shader = ShaderProgram("src/shaders/lighting.vs.glsl", "src/shaders/lighting.fs.glsl");
     ShaderProgram skybox_shader("src/shaders/skybox_vs.glsl", "src/shaders/skybox_fs.glsl");
     ShaderProgram shadow_shader("src/shaders/shadow_map.vs.glsl", "src/shaders/shadow_map.fs.glsl", 
                                 "src/shaders/shadow_map.gs.glsl");
     ShaderProgram debug_quad_shader("src/shaders/debug_quad.vs.glsl", "src/shaders/debug_quad.fs.glsl");
+    ShaderProgram postprocessing_shader("src/shaders/postprocessing.vs.glsl", "src/shaders/postprocessing.fs.glsl");
+    ShaderProgram downsampler_shader("src/shaders/sampler.vs.glsl", "src/shaders/downsampler.fs.glsl");
+    ShaderProgram upsampler_shader("src/shaders/sampler.vs.glsl", "src/shaders/upsampler.fs.glsl");
 
     std::string cubemap_faces[] =
     {
@@ -534,9 +655,6 @@ int main(void)
 
         ProcessInput(state.window);
 
-        glClearColor(0.2, 0.2, 0.2, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
         // NOTE: this is just a silly thing i pulled out
         //       of my a** to simulate a day/night cycle
         // TODO: real day/light cycle, sunlight, atmospheric scattering
@@ -571,14 +689,20 @@ int main(void)
 
         glEnable(GL_DEPTH_CLAMP);
         glBindFramebuffer(GL_FRAMEBUFFER, light_fbo);
-        glFramebufferTexture(GL_FRAMEBUFFER, GL_TEXTURE_2D_ARRAY, light_depth_maps, 0);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, depth_map_resolution, depth_map_resolution);
         glClear(GL_DEPTH_BUFFER_BIT);
         glCullFace(GL_FRONT);
         shadow_shader.use();
         RenderNodeList(&shadow_shader, render_list, render_list_count);
         glCullFace(GL_BACK);
+
+#if POST_PROCESSING_ENABLED
+        glBindFramebuffer(GL_FRAMEBUFFER, render_fbo);
+#else
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+#endif
         glViewport(0, 0, state.window_width, state.window_height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glDisable(GL_DEPTH_CLAMP);
@@ -646,6 +770,78 @@ int main(void)
         RenderMesh(&sky_mesh);
         glDepthFunc(GL_LESS);
         glBindTexture(GL_TEXTURE_2D, 0);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, bloom_fbo);
+        downsampler_shader.use();
+        downsampler_shader.set_int("source_texture", 0);
+        downsampler_shader.set_vec2("source_resolution", Vec2(state.window_width, state.window_height));
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, render_fbo_texture);
+        glDisable(GL_BLEND);
+        for(i32 i = 0; i < BLOOM_MIP_COUNT; i++)
+        {
+            vec2 dim = bloom_mip_list[i].screen_size;
+            glViewport(0, 0, dim.x, dim.y);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 
+                                   bloom_mip_list[i].texture_id, 0);
+
+            glBindVertexArray(screen_quad_vao);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+
+            downsampler_shader.set_vec2("source_resolution", dim);
+            glBindTexture(GL_TEXTURE_2D, bloom_mip_list[i].texture_id);
+        }
+
+        upsampler_shader.use();
+        upsampler_shader.set_int("source_texture", 0);
+        // NOTE, TODO: the radius should be different for the width and height
+        //             as the blur can become noticeably wrong especially on 21:9 viewports
+        //             the vertical filters_radius in particular should be multiplied by
+        //             the aspect ratio  
+        upsampler_shader.set_float("filter_radius", 0.005f);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE);
+        glBlendEquation(GL_FUNC_ADD);
+        for(i32 i = BLOOM_MIP_COUNT - 1; i > 0; i--)
+        {
+            bloom_mip mip = bloom_mip_list[i];
+            bloom_mip next_mip = bloom_mip_list[i - 1];
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, mip.texture_id);
+            glViewport(0, 0, (i32)next_mip.screen_size.x, (i32)next_mip.screen_size.y);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, next_mip.texture_id, 0);
+        
+            glBindVertexArray(screen_quad_vao);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+        glBindVertexArray(0);
+
+#if POST_PROCESSING_ENABLED
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, state.window_width, state.window_height);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+        postprocessing_shader.use();
+        postprocessing_shader.set_int("screen_texture", 0);
+        postprocessing_shader.set_int("bloom_texture", 1);
+        postprocessing_shader.set_float("exposure", tonemapping_exposure);
+        postprocessing_shader.set_int("tonemapper_choice", tonemapper_choice);
+
+        // NOTE: post processing options at the moment don't actually save
+        //       any computational time, this flag just helps
+        //       seeing the visual differences
+        // TODO: graphics settings, different compiled shaders
+        //       for different settings
+        postprocessing_shader.set_int("bloom_enabled", bloom_enabled);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, render_fbo_texture);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, bloom_mip_list[0].texture_id);
+        glBindVertexArray(screen_quad_vao);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glEnable(GL_DEPTH_TEST);
+#endif
 
         if(render_debug_quad_layer < SHADOW_CASCADES_COUNT)
         {
